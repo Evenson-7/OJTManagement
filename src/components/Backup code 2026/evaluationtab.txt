@@ -1,0 +1,1268 @@
+// fileName: EvaluationTab.jsx
+
+import React, { useState, useEffect, useCallback } from "react";
+import { 
+  collection, 
+  query, 
+  where, 
+  getDocs, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  doc, 
+  getDoc,
+  serverTimestamp,
+  onSnapshot,
+  orderBy,
+  limit
+} from "firebase/firestore";
+import { db } from "../../../firebaseConfig";
+import toast, { Toaster } from "react-hot-toast";
+import TabSection from "../../components/TabSection";
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import EvaluationCertificate from '../../components/EvaluationCertificate'; 
+import { 
+  HiOutlineChartPie, 
+  HiOutlinePencil, 
+  HiOutlineTrophy, 
+  HiOutlineChartBar, 
+  HiOutlineStar, 
+  HiOutlineCheckBadge, 
+  HiOutlineBriefcase, 
+  HiOutlineAcademicCap, 
+  HiOutlineUser, 
+  HiOutlineCurrencyDollar, 
+  HiCheckCircle, 
+  HiExclamationTriangle, 
+  HiXCircle, 
+  HiRocketLaunch, 
+  HiOutlineXMark, 
+  HiOutlineArrowDownTray,
+  HiOutlineLightBulb 
+} from "react-icons/hi2";
+import { FaStar, FaTrophy, FaMedal, FaRegHandshake, FaRegStar } from "react-icons/fa";
+import { BsGraphUp } from "react-icons/bs";
+
+// --- Color Utility Classes ---
+const ACCENT_COLOR = 'text-[#0094FF]'; 
+const ACTIVE_BG = 'bg-[#0094FF]';
+const LIGHT_HOVER_BG = 'hover:bg-[#BDE4F7]'; 
+const SUCCESS_BG_NAVY = 'bg-[#002B66]'; 
+
+// Mock useAuth locally 
+const useAuth = () => ({ isAuthReady: true, user: { uid: 'mock-user', role: 'supervisor', name: 'Supervisor Mock' } }); 
+
+// --- Utility Functions ---
+
+const getSafeName = (intern) => {
+  if (!intern) return 'Unknown Intern';
+  if (intern.firstName && intern.lastName) {
+    return `${intern.firstName} ${intern.lastName}`;
+  }
+  const name = intern.internName || intern.fullName || intern.name || intern.displayName;
+  if (!name || name.includes('@')) {
+    return 'Unknown Intern'; 
+  }
+  return name;
+};
+
+// --- UPDATED SCALE: 1-5 Logic ---
+// E=5, A=4, S=3, N=2, P=1
+const ratingScale = [
+  { value: "E", label: "Excellent", range: "5", score: 5, calculationValue: 5, color: "green" }, 
+  { value: "A", label: "Above Standard", range: "4", score: 4, calculationValue: 4, color: "blue" }, 
+  { value: "S", label: "Standard", range: "3", score: 3, calculationValue: 3, color: "yellow" }, 
+  { value: "N", label: "Needs Improvement", range: "2", score: 2, calculationValue: 2, color: "orange" }, 
+  { value: "P", label: "Poor", range: "1", score: 1, calculationValue: 1, color: "red" } 
+];
+
+const evaluationSections = {
+  behaviorAtWork: {
+    title: "I. BEHAVIOR AT WORK",
+    items: [
+      { id: "attention", text: "Attention and concentration on tasks" },
+      { id: "motivation", text: "Motivation and initiative" },
+      { id: "responsibility", text: "Sense of responsibility" },
+      { id: "perseverance", text: "Perseverance and diligence" },
+      { id: "confidence", text: "Self-confidence" },
+      { id: "cleanliness", text: "Cleanliness and orderliness of workplace" },
+      { id: "quality", text: "Quality of work" },
+      { id: "relationships", text: "Relationship with others" },
+      { id: "attendance", text: "Attendance" }
+    ]
+  },
+  academicPerformance: {
+    title: "II. ACADEMIC PERFORMANCE",
+    items: [
+      { id: "speaking", text: "Communication Skills - Speaking" },
+      { id: "writing", text: "Communication Skills - Writing" },
+      { id: "listening", text: "Communication Skills - Listening" },
+      { id: "reading", text: "Communication Skills - Reading" },
+      { id: "knowledge", text: "Knowledge of assigned tasks" },
+      { id: "research", text: "Updating and research performance" },
+      { id: "learning", text: "Ability to learn" }
+    ]
+  },
+  socialBehavior: {
+    title: "III. SOCIAL BEHAVIOR",
+    items: [
+      { id: "leadership", text: "Leadership potential" },
+      { id: "maturity", text: "Maturity" },
+      { id: "concern", text: "Concern for others" },
+      { id: "criticism", text: "Acceptance of criticism" },
+      { id: "expression", text: "Ability to express feelings" },
+      { id: "judgment", text: "Judgment" },
+      { id: "dependability", text: "Dependability" },
+      { id: "respect", text: "Respect for others" },
+      { id: "integrity", text: "Integrity" }
+    ]
+  },
+  personality: {
+    title: "IV. PERSONALITY",
+    items: [
+      { id: "grooming", text: "Grooming and appearance" },
+      { id: "posture", text: "Posture" },
+      { id: "attire", text: "Appropriateness of attire" },
+      { id: "manners", text: "Manners and conduct" },
+      { id: "tact", text: "Tact" }
+    ]
+  },
+  costConsciousness: {
+    title: "V. COST CONSCIOUSNESS",
+    items: [
+      { id: "timeManagement", text: "Time management" },
+      { id: "materials", text: "Economy on the use of materials" },
+      { id: "resources", text: "Conservation of resources" }
+    ]
+  }
+};
+
+const essayQuestions = [
+  { id: "talents", question: "1. What do you think are the intern's talents or strengths?", placeholder: "Describe the intern's key strengths and talents..." },
+  { id: "enhancement", question: "2. What aspects of the intern do you think need enhancement?", placeholder: "Identify areas that need improvement..." },
+  { id: "suggestions", question: "3. What suggestions can you give to further improve the intern?", placeholder: "Provide specific suggestions for improvement..." },
+  { id: "otherRemarks", question: "4. Other Remarks:", placeholder: "Additional comments and observations..." }
+];
+
+// --- Criteria Reference Panel ---
+const CriteriaReferencePanel = () => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg overflow-hidden mb-6">
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between p-4 bg-blue-100 hover:bg-blue-200 transition-colors text-blue-900 font-semibold"
+      >
+        <div className="flex items-center space-x-2">
+          <HiOutlineLightBulb className="w-5 h-5 text-[#0094FF]" />
+          <span>Evaluation Criteria Reference Guide</span>
+        </div>
+        <span className="text-sm text-blue-600">{isOpen ? "Hide Guide" : "Show Guide"}</span>
+      </button>
+      
+      {isOpen && (
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-fadeIn">
+          <div className="col-span-full mb-2">
+             <p className="text-sm text-gray-600 italic">
+               Use these criteria categories to help identify specific <strong>Strengths</strong> and <strong>Weaknesses</strong> for the essay section.
+             </p>
+          </div>
+          {Object.entries(evaluationSections).map(([key, section]) => (
+            <div key={key} className="bg-white p-3 rounded border border-blue-100 shadow-sm">
+              <h5 className="font-bold text-xs text-[#002B66] uppercase mb-2 border-b pb-1">{section.title.replace(/^[IVX]+\. /, '')}</h5>
+              <ul className="list-disc pl-4 space-y-1">
+                {section.items.map(item => (
+                  <li key={item.id} className="text-xs text-gray-700 leading-tight">
+                    {item.text}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- UPDATED BADGE CRITERIA for 1-5 Scale ---
+const badgeDefinitions = [
+    { 
+      id: "excellence_badge", 
+      name: "Excellence Star", 
+      description: "Achieved an overall score of 4.8+ in an evaluation", 
+      icon: <FaStar />, 
+      color: "from-yellow-400 to-yellow-600", 
+      criteria: (evaluations) => evaluations.some(evaluation => evaluation.overallScore >= 4.8) 
+    },
+    { 
+      id: "top_performer", 
+      name: "Top Performer", 
+      description: "Scored 4.5+ in your final evaluation", 
+      icon: <FaTrophy />, 
+      color: "from-yellow-500 to-orange-500", 
+      criteria: (evaluations) => {
+        const finalEval = evaluations.find(e => e.periodCovered === "Final Evaluation");
+        return finalEval ? finalEval.overallScore >= 4.5 : (evaluations.length > 0 && evaluations[0].overallScore >= 4.5);
+      }
+    },
+    { 
+      id: "consistent_performer", 
+      name: "Consistent Performer", 
+      description: "Scored 4.0+ on both Midterm and Final evaluations", 
+      icon: <BsGraphUp />, 
+      color: "from-indigo-400 to-indigo-600", 
+      criteria: (evaluations) => evaluations.filter(evaluation => evaluation.overallScore >= 4.0).length >= 2
+    },
+    { 
+      id: "improvement_champion", 
+      name: "Improvement Champion", 
+      description: "Score improved by 0.5+ points from Midterm to Final", 
+      icon: <HiRocketLaunch />, 
+      color: "from-red-400 to-red-600", 
+      criteria: (evaluations) => {
+        if (evaluations.length < 2) return false;
+        const sorted = [...evaluations].sort((a, b) => 
+          new Date(a.createdAt?.toDate ? a.createdAt.toDate() : a.createdAt) - 
+          new Date(b.createdAt?.toDate ? b.createdAt.toDate() : b.createdAt)
+        );
+        return sorted[1].overallScore - sorted[0].overallScore >= 0.5;
+      }
+    },
+    { 
+      id: "completionist_award", 
+      name: "OJT Completionist", 
+      description: "Completed both Midterm and Final evaluations", 
+      icon: <FaMedal />, 
+      color: "from-orange-400 to-orange-600", 
+      criteria: (evaluations) => evaluations.filter(evaluation => evaluation.status === "submitted" || evaluation.status === "completed").length >= 2
+    }
+];
+
+// --- UPDATED PERFORMANCE RATING for 1-5 Scale ---
+const getPerformanceRating = (score) => {
+  if (score >= 4.5) return { label: "Outstanding", color: "text-[#002B66]", bgColor: "bg-[#BDE4F7]", badge: <FaStar className="inline-block" /> }; 
+  if (score >= 4.0) return { label: "Excellent", color: "text-[#0094FF]", bgColor: "bg-[#BDE4F7]", badge: <FaTrophy className="inline-block" /> }; 
+  if (score >= 3.0) return { label: "Above Standard", color: "text-[#42A5FF]", bgColor: "bg-blue-100", badge: <FaRegStar className="inline-block" /> }; 
+  if (score >= 2.0) return { label: "Standard", color: "text-yellow-600", bgColor: "bg-yellow-100", badge: <HiCheckCircle className="inline-block" /> }; 
+  if (score >= 1.5) return { label: "Needs Improvement", color: "text-orange-600", bgColor: "bg-orange-100", badge: <HiExclamationTriangle className="inline-block" /> }; 
+  return { label: "Poor", color: "text-red-600", bgColor: "bg-red-100", badge: <HiXCircle className="inline-block" /> }; 
+};
+
+// --- UPDATED SECTION SCORE LOGIC (Average of Items) ---
+const calculateSectionScore = (sectionData) => {
+  if (!sectionData || typeof sectionData !== 'object') return 0;
+  
+  // Get all the ratings (letters) selected by the user
+  const ratings = Object.values(sectionData).filter(r => r);
+  if (ratings.length === 0) return 0;
+  
+  // Sum up the values based on 1-5 scale
+  const totalCalculationValue = ratings.reduce((sum, rating) => {
+    const ratingObj = ratingScale.find(r => r.value === rating);
+    return sum + (ratingObj?.calculationValue || 0); 
+  }, 0);
+  
+  const totalItems = ratings.length;
+  
+  // Return simple average (e.g., 3.5)
+  // Use toFixed(2) to prevent long decimals in section view, or keep raw for precision
+  const avg = totalCalculationValue / totalItems;
+  return Number(avg.toFixed(2));
+};
+
+const calculateAllSectionScores = (evaluationData) => {
+  if (!evaluationData) {
+    return {
+      behaviorAtWork: 0, academicPerformance: 0, socialBehavior: 0, personality: 0, costConsciousness: 0
+    };
+  }
+
+  return {
+    behaviorAtWork: calculateSectionScore(evaluationData.behaviorAtWork || {}),
+    academicPerformance: calculateSectionScore(evaluationData.academicPerformance || {}),
+    socialBehavior: calculateSectionScore(evaluationData.socialBehavior || {}),
+    personality: calculateSectionScore(evaluationData.personality || {}),
+    costConsciousness: calculateSectionScore(evaluationData.costConsciousness || {})
+  };
+};
+
+// --- UPDATED OVERALL SCORE LOGIC (Straight Average of ALL items) ---
+const calculateOverallScore = (evaluationData) => {
+  if (!evaluationData) return 0;
+  
+  // 1. Gather ALL ratings from ALL sections
+  const allRatings = [];
+  
+  const sections = [
+    evaluationData.behaviorAtWork || {},
+    evaluationData.academicPerformance || {},
+    evaluationData.socialBehavior || {},
+    evaluationData.personality || {},
+    evaluationData.costConsciousness || {}
+  ];
+
+  sections.forEach(section => {
+    Object.values(section).forEach(rating => {
+      if (rating) allRatings.push(rating);
+    });
+  });
+
+  if (allRatings.length === 0) return 0;
+
+  // 2. Sum them up (E=5, A=4, S=3, N=2, P=1)
+  const totalScore = allRatings.reduce((sum, ratingLetter) => {
+     const match = ratingScale.find(r => r.value === ratingLetter);
+     return sum + (match ? match.calculationValue : 0);
+  }, 0);
+
+  // 3. Divide by total count
+  // Example: 2, 5, 3, 4, 2, 3, 3, 1, 2 = 25 / 9 = 2.777777778
+  const finalAverage = totalScore / allRatings.length;
+
+  return finalAverage; // Returns raw float
+};
+
+// --- Updated Analytics Helpers ---
+
+const calculateConsistencyScore = (scores) => {
+  if (scores.length < 2) return 100;
+  const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+  // Variance calculation
+  const variance = scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / scores.length;
+  const standardDeviation = Math.sqrt(variance);
+  
+  // Adjusted for 1-5 scale: 
+  // If std dev is 0 (perfectly consistent), score is 100.
+  // If std dev is 1.0 (fluctuating by a full grade letter), score drops significantly.
+  // Formula: 100 - (StdDev * 20)
+  return Math.max(0, Math.round(100 - (standardDeviation * 20)));
+};
+
+const getSectionIcon = (section) => {
+  const icons = {
+    behaviorAtWork: <HiOutlineBriefcase />, 
+    academicPerformance: <HiOutlineAcademicCap />, 
+    socialBehavior: <FaRegHandshake />, 
+    personality: <HiOutlineUser />, 
+    costConsciousness: <HiOutlineCurrencyDollar /> 
+  };
+  return icons[section] || <HiOutlineChartPie />; 
+};
+
+const getSectionSuggestions = (section) => {
+  const suggestions = {
+    behaviorAtWork: "Focus on time management and workplace organization skills",
+    academicPerformance: "Enhance communication skills and task-specific knowledge",
+    socialBehavior: "Develop leadership potential and teamwork abilities",
+    personality: "Work on professional appearance and communication etiquette",
+    costConsciousness: "Improve resource management and efficiency practices"
+  };
+  return suggestions[section] || "Continue developing skills in this area";
+};
+
+
+const calculateSupervisorAnalytics = (allEvaluations, assignedInterns) => {
+    const submittedEvaluations = allEvaluations.filter(e => e.status === "completed" || e.status === "submitted");
+
+    if (submittedEvaluations.length === 0 || assignedInterns.length === 0) {
+      return {
+        overallTrend: [], internPerformance: [], sectionTrends: {}, performanceInsights: {}, 
+        improvementAreas: [], strengths: [], monthlyProgress: [], departmentAnalytics: {}
+      };
+    }
+
+    const internEvaluations = {};
+    submittedEvaluations.forEach(evaluation => {
+      if (!internEvaluations[evaluation.internId]) {
+        internEvaluations[evaluation.internId] = [];
+      }
+      internEvaluations[evaluation.internId].push(evaluation);
+    });
+
+    const internPerformance = assignedInterns.map(intern => {
+      const evaluations = internEvaluations[intern.uid] || [];
+      const sortedEvaluations = evaluations
+        .filter(e => e.createdAt && e.overallScore)
+        .sort((a, b) => new Date(a.createdAt.toDate ? a.createdAt.toDate() : a.createdAt) - 
+                       new Date(b.createdAt.toDate ? b.createdAt.toDate() : b.createdAt));
+
+      if (sortedEvaluations.length === 0) {
+        return {
+          internId: intern.uid, internName: getSafeName(intern), department: intern.department || 'No Department',
+          totalEvaluations: 0, averageScore: 0, latestScore: 0, firstScore: 0, improvement: 0, trend: 'No Data',
+          evaluationHistory: [], sectionAverages: {}, performanceRating: getPerformanceRating(0)
+        };
+      }
+
+      const scoresOnly = sortedEvaluations.map(e => e.overallScore || 0).filter(s => s > 0);
+      // Calculate Average (keep raw or fixed to 2 decimals)
+      const avgScore = scoresOnly.reduce((sum, score) => sum + score, 0) / scoresOnly.length;
+      const latestScore = scoresOnly[scoresOnly.length - 1] || 0;
+      const firstScore = scoresOnly[0] || 0;
+      const improvement = latestScore - firstScore;
+
+      const sectionAverages = {};
+      Object.keys(evaluationSections).forEach(sectionKey => {
+        const sectionScores = sortedEvaluations
+          .map(e => e.sectionScores?.[sectionKey])
+          .filter(score => score > 0);
+        
+        if (sectionScores.length > 0) {
+          sectionAverages[sectionKey] = Number((sectionScores.reduce((sum, score) => sum + score, 0) / sectionScores.length).toFixed(2));
+        }
+      });
+
+      return {
+        internId: intern.uid, internName: getSafeName(intern), department: intern.department || 'No Department',
+        totalEvaluations: sortedEvaluations.length, 
+        averageScore: Number(avgScore.toFixed(2)), 
+        latestScore: Number(latestScore.toFixed(2)), 
+        firstScore: Number(firstScore.toFixed(2)),
+        improvement: Number(improvement.toFixed(2)), 
+        // Trend threshold adjusted for 1-5 scale
+        trend: improvement > 0.3 ? 'Improving' : improvement < -0.3 ? 'Declining' : 'Stable',
+        evaluationHistory: sortedEvaluations.map((evaluation, index) => ({
+          evaluation: index + 1, score: evaluation.overallScore || 0,
+          date: new Date(evaluation.createdAt.toDate ? evaluation.createdAt.toDate() : evaluation.createdAt).toLocaleDateString(),
+          title: evaluation.title || `Evaluation ${index + 1}`, period: evaluation.periodCovered || 'Not specified',
+          rating: getPerformanceRating(evaluation.overallScore || 0)
+        })),
+        sectionAverages, performanceRating: getPerformanceRating(avgScore)
+      };
+    }).sort((a, b) => b.averageScore - a.averageScore);
+
+    const allScores = submittedEvaluations.map(e => e.overallScore || 0).filter(s => s > 0);
+    const averageScore = allScores.length > 0 ? (allScores.reduce((sum, score) => sum + score, 0) / allScores.length) : 0;
+    const bestScore = allScores.length > 0 ? Math.max(...allScores) : 0;
+    const latestScore = allScores.length > 0 ? allScores[allScores.length - 1] : 0;
+
+    const performanceInsights = {
+      totalInterns: assignedInterns.length, totalEvaluations: submittedEvaluations.length, 
+      averageScore: Number(averageScore.toFixed(2)),
+      bestScore: Number(bestScore.toFixed(2)), 
+      latestScore: Number(latestScore.toFixed(2)), 
+      consistencyScore: calculateConsistencyScore(allScores),
+      // Adjusted thresholds for 1-5 scale
+      topPerformers: internPerformance.filter(intern => intern.averageScore >= 4.5).length,
+      needsImprovement: internPerformance.filter(intern => intern.averageScore < 3.0).length,
+      improvingInterns: internPerformance.filter(intern => intern.improvement > 0.2).length
+    };
+
+    return {
+      overallTrend: [], internPerformance, sectionTrends: {}, performanceInsights, 
+      improvementAreas: [], strengths: [], monthlyProgress: []
+    };
+};
+
+const calculatePerformanceAnalytics = (userEvaluations) => {
+    const submittedEvaluations = userEvaluations.filter(e => e.status === "completed" || e.status === "submitted");
+
+    if (submittedEvaluations.length === 0) {
+      return {
+        overallTrend: [], sectionTrends: {}, monthlyProgress: [], performanceInsights: {}, improvementAreas: [], strengths: []
+      };
+    }
+
+    const sortedEvaluations = submittedEvaluations
+      .filter(e => e.createdAt && e.overallScore)
+      .sort((a, b) => new Date(a.createdAt.toDate ? a.createdAt.toDate() : a.createdAt) - 
+                     new Date(b.createdAt.toDate ? b.createdAt.toDate() : b.createdAt));
+
+    const scoresOnly = sortedEvaluations.map(e => e.overallScore || 0).filter(s => s > 0);
+    const latestEvaluation = sortedEvaluations[sortedEvaluations.length - 1];
+    const firstEvaluation = sortedEvaluations[0];
+    
+    const averageScore = scoresOnly.reduce((sum, score) => sum + score, 0) / scoresOnly.length;
+    const improvementRate = sortedEvaluations.length > 1 ? 
+      latestEvaluation.overallScore - firstEvaluation.overallScore : 0;
+
+    const performanceInsights = {
+      totalEvaluations: sortedEvaluations.length, 
+      averageScore: Number(averageScore.toFixed(2)),
+      latestScore: Number((latestEvaluation?.overallScore || 0).toFixed(2)), 
+      firstScore: Number((firstEvaluation?.overallScore || 0).toFixed(2)),
+      improvementRate: Number(improvementRate.toFixed(2)), 
+      trend: improvementRate > 0.3 ? 'Improving' : improvementRate < -0.3 ? 'Declining' : 'Stable',
+      bestScore: Math.max(...scoresOnly), 
+      consistencyScore: calculateConsistencyScore(scoresOnly)
+    };
+
+    const sectionAverages = {};
+    Object.keys(evaluationSections).forEach(sectionKey => {
+      const sectionScores = sortedEvaluations
+        .map(e => e.sectionScores?.[sectionKey])
+        .filter(score => score > 0);
+      
+      if (sectionScores.length > 0) {
+        sectionAverages[sectionKey] = Number((sectionScores.reduce((sum, score) => sum + score, 0) / sectionScores.length).toFixed(2));
+      }
+    });
+
+    const strengths = Object.entries(sectionAverages)
+      .filter(([_, score]) => score >= 4.0) // 4.0 is equivalent to old 80
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 3)
+      .map(([section, score]) => ({
+        section: evaluationSections[section]?.title || section,
+        score: score,
+        icon: getSectionIcon(section) 
+      }));
+
+    const improvementAreas = Object.entries(sectionAverages)
+      .filter(([_, score]) => score < 3.5) // 3.5 is equivalent to old 70/75 range
+      .sort(([,a], [,b]) => a - b)
+      .slice(0, 3)
+      .map(([section, score]) => ({
+        section: evaluationSections[section]?.title || section,
+        score: score,
+        icon: getSectionIcon(section), 
+        suggestions: getSectionSuggestions(section)
+      }));
+
+    return {
+      overallTrend: [], sectionTrends: {}, monthlyProgress: [], performanceInsights, improvementAreas, strengths
+    };
+};
+
+// --------------------------------------------------------------------------------------------------------------------
+
+
+const EvaluationTab = ({ user, loadEvaluations, notifications }) => {
+  const { isAuthReady } = typeof useAuth === 'function' ? useAuth() : { isAuthReady: true }; 
+
+  const [activeView, setActiveView] = useState("dashboard");
+  const [selectedIntern, setSelectedIntern] = useState("");
+  
+  // Intern Management States
+  const [myInterns, setMyInterns] = useState([]);
+  const [allInterns, setAllInterns] = useState([]);
+  const [evaluations, setEvaluations] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [evaluationSubmitting, setEvaluationSubmitting] = useState(false);
+  
+  // Form and Edit states
+  const [currentFormPage, setCurrentFormPage] = useState(1);
+  const [editingEvaluation, setEditingEvaluation] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  
+  // Badges and ranking states
+  const [internRankings, setInternRankings] = useState([]);
+  const [myBadges, setMyBadges] = useState([]);
+  
+  // Performance Analytics States
+  const [performanceData, setPerformanceData] = useState({
+    overallTrend: [], sectionTrends: {}, monthlyProgress: [], performanceInsights: {}, 
+    improvementAreas: [], strengths: [], internPerformance: [], departmentAnalytics: {}
+  });
+
+  const [viewingCertificate, setViewingCertificate] = useState(null); 
+
+  const initialFormState = {
+    title: "", internId: "", internName: "", periodCovered: "", 
+    periodStartMonth: "", 
+    periodEndMonth: "",   
+    type: "midterm", status: "draft",
+    behaviorAtWork: {}, academicPerformance: {}, socialBehavior: {}, personality: {}, costConsciousness: {},
+    essayQuestions: { talents: "", enhancement: "", suggestions: "", otherRemarks: "" },
+    supervisorId: user?.uid || "", supervisorName: user?.name || user?.displayName || "",
+    evaluationDate: "", createdAt: "", updatedAt: ""
+  };
+  const [evaluationForm, setEvaluationForm] = useState(initialFormState);
+
+
+  // --- Data Loading Effects ---
+
+  // 1. Load My Interns (for supervisors)
+  useEffect(() => {
+    let unsubscribeInterns;
+    if (!user || !isAuthReady || user?.role !== "supervisor") return;
+    
+    const loadInternsData = async () => {
+      try {
+        setLoading(true);
+        const internsQuery = query(
+          collection(db, "users"),
+          where("role", "==", "intern")
+        );
+        
+        unsubscribeInterns = onSnapshot(internsQuery, (querySnapshot) => {
+          const fetchedInterns = [];
+          querySnapshot.forEach((doc) => {
+            const internData = { uid: doc.id, ...doc.data() };
+            fetchedInterns.push(internData);
+          });
+
+          fetchedInterns.sort((a, b) => 
+            (a.fullName || a.name || "").localeCompare(b.fullName || b.name || "")
+          );
+
+          const myInternsList = fetchedInterns.filter(intern => 
+            intern.supervisorId === user.uid
+          );
+
+          setMyInterns(myInternsList);
+          
+        }, (error) => {
+          console.error("❌ Error loading interns in EvaluationTab:", error);
+          toast.error("Failed to load interns.");
+        });
+        
+      } catch (error) {
+        console.error("❌ Error setting up intern listener:", error);
+        toast.error("Failed to setup intern data listener.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadInternsData();
+    
+    return () => {
+      if (unsubscribeInterns) {
+        unsubscribeInterns();
+      }
+    };
+  }, [user?.uid, user?.role, isAuthReady]);
+
+  // 2. Load All Interns for Ranking (for both roles)
+  useEffect(() => {
+    let unsubscribeAllInterns;
+    if (!isAuthReady) return; 
+
+    const loadAllInternsData = async () => {
+      try {
+        const internsQuery = query(
+          collection(db, "users"),
+          where("role", "==", "intern")
+        );
+        
+        unsubscribeAllInterns = onSnapshot(internsQuery, (querySnapshot) => {
+          const fetchedInterns = [];
+          querySnapshot.forEach((doc) => {
+            const internData = { uid: doc.id, ...doc.data() };
+            fetchedInterns.push(internData);
+          });
+
+          setAllInterns(fetchedInterns);
+          
+        }, (error) => {
+          console.error("Error loading all interns:", error);
+          setAllInterns([]);
+        });
+        
+      } catch (error) {
+        console.error("Error setting up all interns listener:", error);
+        setAllInterns([]);
+      }
+    };
+
+    loadAllInternsData();
+    
+    return () => {
+      if (unsubscribeAllInterns) {
+        unsubscribeAllInterns();
+      }
+    };
+  }, [isAuthReady]);
+
+  // 3. Load Evaluations with proper data initialization and analytics
+  useEffect(() => {
+    let unsubscribeEvaluations;
+    if (!user || !isAuthReady) return;
+    
+    const loadEvaluationsData = async () => {
+      try {
+        const evaluationsRef = collection(db, "evaluations");
+        let evaluationsQuery;
+
+        if (user.role === "supervisor") {
+          evaluationsQuery = query(
+            evaluationsRef,
+            where("supervisorId", "==", user.uid),
+            orderBy("createdAt", "desc")
+          );
+        } else {
+          evaluationsQuery = query(
+            evaluationsRef,
+            where("internId", "==", user.uid),
+            where("status", "in", ["completed", "submitted"]),
+            orderBy("createdAt", "desc")
+          );
+        }
+        
+        unsubscribeEvaluations = onSnapshot(evaluationsQuery, (querySnapshot) => {
+          const fetchedEvaluations = [];
+          querySnapshot.forEach((doc) => {
+            const evalData = { id: doc.id, ...doc.data() };
+            
+            evalData.behaviorAtWork = evalData.behaviorAtWork || {};
+            evalData.academicPerformance = evalData.academicPerformance || {};
+            evalData.socialBehavior = evalData.socialBehavior || {};
+            evalData.personality = evalData.personality || {};
+            evalData.costConsciousness = evalData.costConsciousness || {};
+            evalData.essayQuestions = evalData.essayQuestions || {
+              talents: "", enhancement: "", suggestions: "", otherRemarks: ""
+            };
+            
+            if (!evalData.sectionScores || Object.keys(evalData.sectionScores).length === 0) {
+              evalData.sectionScores = calculateAllSectionScores(evalData);
+            }
+            
+            if (!evalData.overallScore) {
+              evalData.overallScore = calculateOverallScore(evalData);
+            }
+            
+            if (evalData.overallScore) {
+              evalData.performanceRating = getPerformanceRating(evalData.overallScore);
+            }
+            
+            fetchedEvaluations.push(evalData);
+          });
+          
+          setEvaluations(fetchedEvaluations);
+          
+          if (user.role === "intern" && fetchedEvaluations.length > 0) {
+            const submittedEvaluations = fetchedEvaluations.filter(e => e.status === "completed" || e.status === "submitted");
+            calculateBadges(submittedEvaluations);
+            setPerformanceData(calculatePerformanceAnalytics(submittedEvaluations));
+          } else if (user.role === "supervisor") {
+            const submittedEvaluations = fetchedEvaluations.filter(e => e.status === "completed" || e.status === "submitted");
+            const supervisorAnalytics = calculateSupervisorAnalytics(submittedEvaluations, myInterns);
+            setPerformanceData(supervisorAnalytics);
+          }
+          
+        }, (error) => {
+          console.error("❌ Error loading evaluations:", error);
+          toast.error("Failed to load evaluations. Please check your permissions.");
+        });
+        
+      } catch (error) {
+        console.error("❌ Error setting up evaluations listener:", error);
+        toast.error("Failed to setup evaluations data listener.");
+      }
+    };
+
+    loadEvaluationsData();
+    
+    return () => {
+      if (unsubscribeEvaluations) {
+        unsubscribeEvaluations();
+      }
+    };
+  }, [user?.uid, user?.role, myInterns, isAuthReady]);
+
+  // 4. Load Rankings Data (UPDATED: Added Name Tie-Breaker)
+  useEffect(() => {
+    if (!isAuthReady) return; 
+
+    const loadRankingsData = async () => {
+      try {
+        const evaluationsQuery = query(
+          collection(db, "evaluations"),
+          where("status", "in", ["completed", "submitted"])
+        );
+        
+        const evaluationsSnapshot = await getDocs(evaluationsQuery);
+        const allEvaluations = [];
+        evaluationsSnapshot.forEach((doc) => {
+          allEvaluations.push({ id: doc.id, ...doc.data() });
+        });
+
+        const internEvaluations = {};
+        allEvaluations.forEach(evaluation => {
+          if (!internEvaluations[evaluation.internId]) {
+            internEvaluations[evaluation.internId] = [];
+          }
+          internEvaluations[evaluation.internId].push(evaluation);
+        });
+
+        const rankings = Object.keys(internEvaluations).map(internId => {
+          const evaluationsList = internEvaluations[internId];
+          
+          const submittedEvals = evaluationsList.filter(e => e.overallScore > 0 && (e.createdAt || e.submittedAt));
+          
+          // Updated average calculation for 1-5 scale
+          const avgScore = submittedEvals.length > 0
+            ? (submittedEvals.reduce((sum, evaluation) => sum + (evaluation.overallScore || 0), 0) / submittedEvals.length) 
+            : 0;
+            
+          const latestScore = submittedEvals.sort((a, b) => {
+            const dateA_timestamp = a.submittedAt || a.createdAt;
+            const dateB_timestamp = b.submittedAt || b.createdAt;
+
+            const dateA = dateA_timestamp?.toDate ? dateA_timestamp.toDate() : new Date(dateA_timestamp || 0);
+            const dateB = dateB_timestamp?.toDate ? dateB_timestamp.toDate() : new Date(dateB_timestamp || 0);
+            
+            return dateB - dateA; 
+          })[0]?.overallScore || 0;
+          
+          const internData = allInterns.find(i => i.uid === internId);
+          
+          return {
+            internId,
+            internName: getSafeName(internData) || evaluationsList[0]?.internName || "Unknown",
+            department: internData?.department || "No Department",
+            totalEvaluations: submittedEvals.length,
+            averageScore: Number(avgScore.toFixed(2)),
+            latestScore: Number(latestScore.toFixed(2)),
+            trend: 0, 
+            performanceRating: getPerformanceRating(avgScore)
+          };
+        }).filter(r => r.totalEvaluations > 0)
+        // --- Added Last Name Tie-Breaker Logic ---
+        .sort((a, b) => {
+            // 1. Primary Sort: Higher Score is better
+            if (b.averageScore !== a.averageScore) {
+              return b.averageScore - a.averageScore;
+            }
+      
+            // 2. Secondary Sort: Last Name (A-Z)
+            const getLastWord = (name) => {
+              if (!name) return "";
+              const parts = name.trim().split(" ");
+              return parts[parts.length - 1].toLowerCase();
+            };
+      
+            const lastNameA = getLastWord(a.internName);
+            const lastNameB = getLastWord(b.internName);
+      
+            return lastNameA.localeCompare(lastNameB);
+        });
+
+        setInternRankings(rankings);
+      } catch (error) {
+        console.error("Error loading rankings:", error);
+        toast.error("Failed to load rankings due to missing data or permissions.");
+        
+        if (user?.role === "intern" && evaluations.length > 0) {
+          const mySubmittedEvals = evaluations.filter(e => e.status === "completed" || e.status === "submitted");
+          if (mySubmittedEvals.length > 0) {
+            const avg = mySubmittedEvals.reduce((sum, e) => sum + (e.overallScore || 0), 0) / mySubmittedEvals.length;
+            const myRanking = [{
+              internId: user.uid, internName: user.name || user.displayName || "Me", department: user.department || "My Department",
+              totalEvaluations: mySubmittedEvals.length, 
+              averageScore: Number(avg.toFixed(2)),
+              latestScore: mySubmittedEvals[0]?.overallScore || 0, trend: 0, performanceRating: getPerformanceRating(mySubmittedEvals[0]?.overallScore || 0)
+            }];
+            setInternRankings(myRanking);
+          }
+        }
+      }
+    };
+
+    if (allInterns.length > 0 && isAuthReady) {
+      loadRankingsData();
+    }
+  }, [allInterns.length, evaluations.length, user, isAuthReady]);
+
+  // --- Handlers ---
+
+  const handleExportCertificate = () => {
+    const certificateElement = document.getElementById('certificate-to-export');
+    if (!certificateElement) {
+      toast.error("Could not find certificate element to export.");
+      return;
+    }
+
+    toast.loading("Generating PDF...", { id: 'pdf-toast', style: { background: '#002B66', color: '#fff' } });
+
+    html2canvas(certificateElement, {
+      scale: 2, 
+      useCORS: true,
+    }).then((canvas) => {
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('l', 'mm', 'a4'); 
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const ratio = Math.min(pdfWidth / canvas.width, pdfHeight / canvas.height);
+      const imgWidth = canvas.width * ratio;
+      const imgHeight = canvas.height * ratio;
+      const imgX = (pdfWidth - imgWidth) / 2;
+      const imgY = (pdfHeight - imgHeight) / 2;
+
+      const internName = getSafeName(viewingCertificate.intern) || 'Intern';
+
+      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth, imgHeight);
+      toast.success("PDF generated!", { id: 'pdf-toast' });
+      pdf.save(`OJT_Certificate_of_Completion_${internName.replace(' ', '_')}.pdf`);
+    }).catch(err => {
+      console.error("Error exporting PDF:", err);
+      toast.error("Failed to generate PDF.", { id: 'pdf-toast' });
+    });
+  };
+
+  const calculateBadges = (userEvaluations) => {
+    const earnedBadges = badgeDefinitions.filter(badge => 
+      badge.criteria(userEvaluations)
+    );
+    setMyBadges(earnedBadges);
+  };
+
+  const resetEvaluationForm = () => {
+    setEvaluationForm(initialFormState);
+    setCurrentFormPage(1);
+    setEditingEvaluation(null);
+    setIsEditMode(false);
+  };
+
+  const handleEditEvaluation = (evaluation) => {
+    setEvaluationForm({ 
+      ...initialFormState, 
+      ...evaluation, 
+      periodStartMonth: evaluation.periodStartMonth || "", 
+      periodEndMonth: evaluation.periodEndMonth || "",     
+      periodCovered: evaluation.periodCovered || "",       
+      evaluationDate: evaluation.evaluationDate || "", 
+      updatedAt: new Date().toISOString() 
+    });
+    setEditingEvaluation(evaluation);
+    setIsEditMode(true);
+    setCurrentFormPage(1);
+    setActiveView("form");
+  };
+
+  const handleViewEvaluation = (evaluation) => {
+    setEvaluationForm({ 
+      ...initialFormState, 
+      ...evaluation, 
+      periodStartMonth: evaluation.periodStartMonth || "", 
+      periodEndMonth: evaluation.periodEndMonth || "",     
+      periodCovered: evaluation.periodCovered || "",       
+      evaluationDate: evaluation.evaluationDate || "" 
+    });
+    setEditingEvaluation(evaluation);
+    setIsEditMode(false);
+    setCurrentFormPage(1);
+    setActiveView("form");
+  };
+
+  const handleDeleteEvaluation = async (evaluationId) => {
+    if (!confirm("Are you sure you want to delete this evaluation? This action cannot be undone.")) return;
+    
+    try {
+      await deleteDoc(doc(db, "evaluations", evaluationId));
+      toast.success("Evaluation deleted successfully");
+    } catch (error) {
+      console.error("Error deleting evaluation:", error);
+      toast.error("Failed to delete evaluation");
+    }
+  };
+
+  const validateInternAssignment = async (internId) => {
+    try {
+      const internDoc = await getDoc(doc(db, "users", internId));
+      if (!internDoc.exists()) {
+        toast.error("Intern not found.");
+        return false;
+      }
+      const internData = internDoc.data();
+      if (internData.supervisorId !== user.uid) {
+        toast.error("You can only evaluate interns assigned to you.");
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error("Error validating intern assignment:", error);
+      toast.error("Error validating intern assignment.");
+      return false;
+    }
+  };
+
+  const handleRatingChange = (section, itemId, rating) => {
+    if (!isEditMode && editingEvaluation) return;
+    setEvaluationForm(prev => ({
+      ...prev, [section]: { ...prev[section], [itemId]: rating }, updatedAt: new Date().toISOString()
+    }));
+  };
+
+  const handleEssayChange = (questionId, value) => {
+    if (!isEditMode && editingEvaluation) return;
+    setEvaluationForm(prev => ({
+      ...prev, essayQuestions: { ...prev.essayQuestions, [questionId]: value }, updatedAt: new Date().toISOString()
+    }));
+  };
+
+  const handleInternSelection = async (internUid) => {
+    if (!internUid) {
+      setEvaluationForm(prev => ({
+        ...prev, internId: "", internName: "", title: "", updatedAt: new Date().toISOString()
+      }));
+      return;
+    }
+
+    const isValid = await validateInternAssignment(internUid);
+    if (!isValid) {
+      return;
+    }
+
+    const selectedInternData = myInterns.find(intern => intern.uid === internUid);
+    if (selectedInternData) {
+      setEvaluationForm(prev => ({
+        ...prev,
+        internId: internUid,
+        internName: getSafeName(selectedInternData), 
+        title: `Evaluation - ${getSafeName(selectedInternData)}`,
+        updatedAt: new Date().toISOString()
+      }));
+      
+      toast.success(`Selected ${getSafeName(selectedInternData)} for evaluation`);
+    } else {
+      toast.error("Selected intern is no longer assigned to you.");
+    }
+  };
+
+  const handleFormChange = (field, value) => {
+    setEvaluationForm(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleViewCertificate = (evaluation) => {
+    const internData = allInterns.find(intern => intern.uid === evaluation.internId);
+    setViewingCertificate({
+      evaluation: evaluation,
+      intern: internData 
+    });
+  };
+
+  const handleSaveEvaluation = async (submitType = "draft") => {
+    if (!evaluationForm.internId && !isEditMode) {
+      toast.error("Please select an intern first.");
+      return;
+    }
+
+    if (user.role === 'supervisor' && (!evaluationForm.periodStartMonth || !evaluationForm.periodEndMonth || !evaluationForm.periodCovered)) {
+        toast.error("Please fill in the 'Evaluation Start Month', 'Evaluation End Month', and 'Period Covered' before saving or submitting.");
+        return;
+    }
+    
+    if (submitType === "submitted" && user.role === 'supervisor' && !evaluationForm.evaluationDate) {
+        toast.error("Please fill in the 'Evaluation Date' on Page 2 before submitting.");
+        return;
+    }
+
+    if (!isEditMode) {
+      const isValid = await validateInternAssignment(evaluationForm.internId);
+      if (!isValid) return;
+    }
+
+    setEvaluationSubmitting(true);
+    try {
+      const sectionScores = calculateAllSectionScores(evaluationForm);
+      // NOTE: Using the flattening function for overall score
+      const overallScore = calculateOverallScore(evaluationForm);
+      const performanceRating = getPerformanceRating(overallScore); 
+
+      const evaluationData = {
+        ...evaluationForm, 
+        status: submitType, 
+        overallScore: overallScore, 
+        sectionScores: sectionScores,        
+        totalItems: 33,
+        completedItems: Object.values(evaluationForm.behaviorAtWork || {}).filter(r => r).length + 
+                       Object.values(evaluationForm.academicPerformance || {}).filter(r => r).length +
+                       Object.values(evaluationForm.socialBehavior || {}).filter(r => r).length +
+                       Object.values(evaluationForm.personality || {}).filter(r => r).length +
+                       Object.values(evaluationForm.costConsciousness || {}).filter(r => r).length,
+        completionPercentage: Math.round(((Object.values(evaluationForm.behaviorAtWork || {}).filter(r => r).length + 
+                                   Object.values(evaluationForm.academicPerformance || {}).filter(r => r).length +
+                                   Object.values(evaluationForm.socialBehavior || {}).filter(r => r).length +
+                                   Object.values(evaluationForm.personality || {}).filter(r => r).length +
+                                   Object.values(evaluationForm.costConsciousness || {}).filter(r => r).length +
+                                   Object.values(evaluationForm.essayQuestions || {}).filter(q => q?.trim()).length) / 37) * 100),
+        updatedAt: serverTimestamp(),
+        submittedAt: submitType === "submitted" ? serverTimestamp() : (evaluationForm.submittedAt || null)
+      };
+      
+      evaluationData.periodCovered = evaluationForm.periodCovered || 'N/A';
+      evaluationData.title = `${evaluationForm.periodCovered || 'Evaluation'} (${evaluationForm.periodStartMonth || 'N/A'} - ${evaluationForm.periodEndMonth || 'N/A'}) - ${evaluationForm.internName}`;
+
+      delete evaluationData.performanceRating;
+
+      if (isEditMode && editingEvaluation) {
+        delete evaluationData.createdAt; 
+        await updateDoc(doc(db, "evaluations", editingEvaluation.id), evaluationData);
+      } else {
+        evaluationData.createdAt = serverTimestamp();
+        const docRef = await addDoc(collection(db, "evaluations"), evaluationData);
+        
+        if (submitType === "submitted") {
+          await addDoc(collection(db, "notifications"), {
+            userId: evaluationForm.internId, type: "evaluation_completed", title: "Evaluation Completed",
+            message: `Your evaluation has been completed by ${user.name || user.displayName}. Overall score: ${overallScore.toFixed(2)} (${performanceRating.label})`,
+            data: { evaluationId: docRef.id, overallScore: overallScore, performanceRating: performanceRating.label, supervisorName: user.name || user.displayName },
+            read: false, createdAt: serverTimestamp()
+          });
+        }
+      }
+
+      if (submitType === "submitted" && evaluationForm.periodCovered === "Final Evaluation") {
+        try {
+          const internUserRef = doc(db, "users", evaluationForm.internId);
+          await updateDoc(internUserRef, { isOjtComplete: true });
+        } catch (error) {
+          console.warn("Could not set OJT completion flag:", error);
+        }
+      }
+      
+      toast.success(`Evaluation ${submitType === "submitted" ? "submitted" : "saved"} successfully!`);
+      resetEvaluationForm();
+      setActiveView("dashboard");
+      
+    } catch (error) {
+      console.error("Error saving evaluation:", error);
+      toast.error("Failed to save evaluation. Please try again.");
+    } finally {
+      setEvaluationSubmitting(false);
+    }
+  };
+
+  const switchActiveView = (newView) => {
+    if (activeView === 'form' && newView !== 'form' && user?.role === 'supervisor') {
+        const hasUnsavedChanges = JSON.stringify(evaluationForm) !== JSON.stringify(initialFormState);
+        const isEditing = !!editingEvaluation;
+
+        if (hasUnsavedChanges || isEditing) {
+            if (!confirm("You have unsaved changes in the evaluation form. Do you want to discard them and leave?")) {
+                return; 
+            }
+        }
+    }
+    setActiveView(newView);
+  }
+
+  const supervisorViews = [
+    { id: "dashboard", name: "Dashboard", icon: <HiOutlineChartPie /> },
+    { id: "form", name: "Evaluation Form", icon: <HiOutlinePencil /> },
+    { id: "rankings", name: "Rankings", icon: <HiOutlineTrophy /> },
+    { id: "performance", name: "Performance", icon: <HiOutlineChartBar /> }
+  ];
+
+  const internViews = [
+    { id: "dashboard", name: "My Reviews", icon: <HiOutlineStar /> },
+    { id: "rankings", name: "Rankings", icon: <HiOutlineTrophy /> },
+    { id: "badges", name: "Badges", icon: <HiOutlineCheckBadge /> },
+    { id: "performance", name: "Performance", icon: <HiOutlineChartBar /> }
+  ];
+
+  const availableViews = user?.role === "supervisor" ? supervisorViews : internViews;
+
+  const tabData = {
+    evaluations, myInterns, allInterns, internRankings, myBadges, performanceData,
+    evaluationForm, loading, evaluationSubmitting, currentFormPage, editingEvaluation,
+    isEditMode, ratingScale, evaluationSections, essayQuestions, badgeDefinitions,
+    calculateSectionScore, calculateOverallScore, getPerformanceRating, getSectionIcon,
+    CriteriaReferencePanel 
+  };
+
+  const tabHandlers = {
+    handleEditEvaluation, handleViewEvaluation, handleDeleteEvaluation,
+    resetEvaluationForm, setActiveView: switchActiveView, setCurrentFormPage, handleRatingChange,
+    handleEssayChange, handleInternSelection, handleSaveEvaluation,
+    handleFormChange, 
+    handleViewCertificate
+  };
+
+  return (
+    <>
+      <Toaster 
+        position="top-right" 
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#363636',
+            color: '#fff',
+          },
+          success: {
+            duration: 3000,
+            iconTheme: {
+              primary: '#002B66', 
+              secondary: '#fff',
+            },
+          },
+          error: {
+            duration: 5000,
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+          },
+        }}
+      />
+
+      {viewingCertificate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 bg-opacity-75 p-4">
+          <div className="bg-white rounded-lg shadow-2xl relative max-w-4xl">
+            <button
+              onClick={() => setViewingCertificate(null)}
+              className="absolute -top-4 -right-4 z-10 w-10 h-10 bg-white rounded-full text-gray-700 flex items-center justify-center shadow-lg hover:bg-red-500 hover:text-white transition-all"
+              aria-label="Close certificate view"
+            >
+              <HiOutlineXMark className="w-6 h-6" />
+            </button>
+            
+            <EvaluationCertificate 
+              evaluation={viewingCertificate.evaluation} 
+              intern={viewingCertificate.intern}
+            />
+            
+            <div className="p-4 bg-gray-100 border-t border-gray-200 flex justify-center">
+              <button
+                onClick={handleExportCertificate}
+                className={`px-6 py-3 ${SUCCESS_BG_NAVY} text-white rounded-lg hover:bg-[#004799] font-medium flex items-center space-x-2 transition-colors`}
+              >
+                <HiOutlineArrowDownTray className="w-5 h-5" />
+                <span>Export as PDF</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="p-6 bg-gray-50 min-h-full">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-900">Evaluations</h1>
+          <p className="text-gray-600 mt-2">
+            {user?.role === "supervisor" 
+              ? "Manage interns and create official evaluations with comprehensive analytics" 
+              : "View your performance evaluations and track your progress"}
+          </p>
+        </div>
+
+        <div className="mb-6">
+          <nav className="flex space-x-1 bg-white rounded-lg p-1 shadow-sm border border-gray-200 max-w-fit">
+            {availableViews.map((view) => (
+              <button
+                key={view.id}
+                onClick={() => switchActiveView(view.id)}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-md font-medium transition-all ${
+                  activeView === view.id 
+                    ? `${ACTIVE_BG} text-white shadow-md`
+                    : `text-gray-600 hover:text-gray-900 ${LIGHT_HOVER_BG}`
+                }`}
+              >
+                <span className="text-lg">{view.icon}</span> 
+                <span>{view.name}</span>
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        <div className="min-h-96">
+          <TabSection 
+            currentTab={activeView} 
+            data={tabData} 
+            user={user} 
+            handlers={tabHandlers} 
+          />
+        </div>
+      </div>
+    </>
+  );
+};
+
+export default EvaluationTab;

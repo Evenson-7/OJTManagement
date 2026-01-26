@@ -1,0 +1,708 @@
+// fileName: TabSection.jsx
+
+import React from "react";
+import {
+  HiOutlinePencilSquare,
+  HiOutlineTrash,
+  HiOutlineArrowDownTray,
+  HiOutlineDocumentText,
+  HiOutlinePlus,
+  HiOutlineCheckCircle
+} from "react-icons/hi2";
+
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December"
+];
+
+const REPORT_ID = "print-report";
+
+// --- BUILDER COMPONENT ---
+
+const TemplateBuilder = ({ template, handlers, isEditMode, onSave }) => {
+  const {
+    addSection,
+    removeSection,
+    updateSectionTitle,
+    addQuestion,
+    removeQuestion,
+    updateQuestionText,
+    addEssay,
+    removeEssay,
+    updateEssayText,
+    loadStandardTemplate
+  } = handlers;
+
+  return (
+    <div className="space-y-8 bg-white p-8 rounded-xl border border-gray-200 shadow-sm max-w-5xl mx-auto">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-6 gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">
+            {isEditMode ? "Edit Evaluation Template" : "Create Evaluation Template"}
+          </h2>
+          <p className="text-gray-500">
+            Customize the criteria below or load a standard format.
+          </p>
+        </div>
+        <div>
+          <button
+            onClick={loadStandardTemplate}
+            className="text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-lg font-medium transition-colors border border-blue-200"
+          >
+            Load Standard Template
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        {template.sections.length === 0 ? (
+          <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
+            <p className="text-gray-500 font-medium mb-2">
+              The form is currently empty.
+            </p>
+            <p className="text-sm text-gray-400 mb-4">
+              Click "Load Standard Template" for a quick start, or add a section manually.
+            </p>
+          </div>
+        ) : (
+          template.sections.map((section, sIndex) => (
+            <div
+              key={section.id}
+              className="bg-gray-50 p-6 rounded-xl border border-gray-200 relative group"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="bg-[#002B66] text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shrink-0">
+                  {sIndex + 1}
+                </div>
+                <input
+                  type="text"
+                  value={section.title}
+                  onChange={(e) =>
+                    updateSectionTitle(section.id, e.target.value)
+                  }
+                  className="flex-1 text-lg font-bold bg-transparent border-b-2 border-transparent focus:border-blue-500 outline-none px-2 transition-colors placeholder-gray-400"
+                  placeholder="Section Title e.g., Behavior at Work"
+                />
+                <button
+                  onClick={() => removeSection(section.id)}
+                  className="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors"
+                >
+                  <HiOutlineTrash className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="pl-11 space-y-3">
+                {section.items.map((item, qIndex) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3"
+                  >
+                    <span className="text-gray-400 font-medium text-xs w-4 text-right">
+                      {qIndex + 1}.
+                    </span>
+                    <input
+                      type="text"
+                      value={item.text}
+                      onChange={(e) =>
+                        updateQuestionText(section.id, item.id, e.target.value)
+                      }
+                      className="flex-1 p-3 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none shadow-sm text-sm"
+                      placeholder="Enter evaluation criterion..."
+                    />
+                    <button
+                      onClick={() => removeQuestion(section.id, item.id)}
+                      className="text-gray-300 hover:text-red-500"
+                    >
+                      <HiOutlineTrash className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+
+                <button
+                  onClick={() => addQuestion(section.id)}
+                  className="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 py-2 px-3 hover:bg-blue-50 rounded-lg transition-colors"
+                >
+                  <HiOutlinePlus className="w-4 h-4" />
+                  Add Criteria
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+
+        <button
+          onClick={addSection}
+          className="w-full py-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:border-blue-500 hover:text-blue-500 hover:bg-blue-50 transition-all font-medium flex justify-center items-center gap-2"
+        >
+          <HiOutlinePlus className="w-5 h-5" />
+          Add New Rating Section
+        </button>
+      </div>
+
+      <div className="border-t pt-8 mt-8">
+        <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <HiOutlineDocumentText className="text-blue-600" />
+          Essay Questions
+        </h3>
+        <div className="space-y-4">
+          {template.essays.map((essay, eIndex) => (
+            <div
+              key={essay.id}
+              className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 flex items-center gap-3"
+            >
+              <span className="text-blue-400 font-bold text-sm">
+                Q{eIndex + 1}
+              </span>
+              <input
+                type="text"
+                value={essay.question}
+                onChange={(e) =>
+                  updateEssayText(essay.id, e.target.value)
+                }
+                className="flex-1 p-2 bg-white border border-gray-200 rounded focus:border-blue-500 outline-none placeholder-gray-400"
+                placeholder="Enter essay question..."
+              />
+              <button
+                onClick={() => removeEssay(essay.id)}
+                className="text-gray-400 hover:text-red-500"
+              >
+                <HiOutlineTrash className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={addEssay}
+          className="mt-3 text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+        >
+          <HiOutlinePlus className="w-4 h-4" />
+          Add Essay Question
+        </button>
+      </div>
+
+      <div className="sticky bottom-0 bg-white border-t border-gray-100 pt-4 pb-2 mt-8 flex justify-end">
+        <button
+          onClick={onSave}
+          className="bg-[#0094FF] text-white px-8 py-3 rounded-lg font-bold shadow-lg hover:bg-[#002B66] transition-colors flex items-center gap-2"
+        >
+          <HiOutlineCheckCircle className="w-5 h-5" />
+          Save &amp; Continue to Form
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// --- FORM DISPLAY COMPONENT ---
+
+function EvaluationForm({ data, handlers, user }) {
+  const { formTemplate, evaluationForm, isEditMode, editingEvaluation } = data;
+  const [isBuilderMode, setIsBuilderMode] = React.useState(false);
+
+  const isSubmitted =
+    evaluationForm.status === "submitted" ||
+    evaluationForm.status === "completed";
+  const isReadOnly = isSubmitted && (!isEditMode || editingEvaluation);
+  const canEditTemplate = user?.role === "supervisor" && !isReadOnly;
+
+  if (isBuilderMode) {
+    return (
+      <TemplateBuilder
+        template={formTemplate}
+        handlers={handlers}
+        isEditMode={isEditMode}
+        onSave={() => setIsBuilderMode(false)}
+      />
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex gap-3">
+          <button
+            onClick={() => handlers.setActiveView("dashboard")}
+            className="text-gray-500 hover:text-gray-800 px-3 py-2 rounded hover:bg-gray-100"
+          >
+            Cancel
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {canEditTemplate && (
+            <button
+              onClick={() => setIsBuilderMode(true)}
+              className="flex items-center gap-2 bg-white border border-gray-300 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 text-gray-700 shadow-sm"
+            >
+              <HiOutlinePencilSquare className="w-4 h-4" />
+              {formTemplate.sections.length === 0
+                ? "Setup Template"
+                : "Edit Template"}
+            </button>
+          )}
+
+          {isSubmitted && (
+            <button
+              onClick={() =>
+                handlers.handlePDF(
+                  REPORT_ID,
+                  `Eval_${evaluationForm.internName || "Intern"}`
+                )
+              }
+              className="bg-[#002B66] text-white px-4 py-2 rounded-lg shadow hover:bg-blue-900 flex items-center gap-2 text-sm font-bold"
+            >
+              <HiOutlineArrowDownTray className="w-4 h-4" />
+              Download PDF
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* PRINTABLE REPORT AREA */}
+      {/* NOTE: Inline styles use HEX to avoid oklch errors in html2canvas */}
+      <div
+        id={REPORT_ID}
+        className="p-10 rounded-xl shadow-xl border border-gray-200 min-h-[800px]"
+        style={{ backgroundColor: "#ffffff", color: "#111827" }}
+      >
+        <div
+          className="text-center border-b-2 border-gray-800 pb-6 mb-8"
+          style={{ borderColor: "#1f2937" }}
+        >
+          <h1
+            className="text-2xl font-black uppercase text-[#002B66] tracking-wider"
+            style={{ color: "#002B66" }}
+          >
+            Performance Evaluation
+          </h1>
+          <p
+            className="text-gray-500 mt-2 font-medium"
+            style={{ color: "#6b7280" }}
+          >
+            Internship Program
+          </p>
+        </div>
+
+        {/* TOP INFO GRID */}
+        <div
+          className="grid grid-cols-2 gap-6 p-6 rounded-lg mb-10 text-sm border border-gray-100"
+          style={{ backgroundColor: "#f9fafb", borderColor: "#e5e7eb" }}
+        >
+          {/* Intern Name */}
+          <div>
+            <label
+              className="block text-gray-400 font-bold uppercase text-xs mb-1"
+              style={{ color: "#9ca3af" }}
+            >
+              Intern Name
+            </label>
+            {!isReadOnly ? (
+              <select
+                value={evaluationForm.internId}
+                onChange={(e) =>
+                  handlers.handleInternSelection(e.target.value)
+                }
+                className="w-full bg-transparent border-b border-gray-300 font-bold text-gray-800 focus:border-blue-500 outline-none pb-1"
+              >
+                <option value="">Select Intern...</option>
+                {data.myInterns.map((i) => (
+                  <option key={i.uid} value={i.uid}>
+                    {i.firstName
+                      ? `${i.firstName} ${i.lastName || ""}`.trim()
+                      : i.name || i.fullName}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div
+                className="font-bold text-lg"
+                style={{ color: "#111827" }}
+              >
+                {evaluationForm.internName}
+              </div>
+            )}
+          </div>
+
+          {/* Overall Score */}
+          <div>
+            <label
+              className="block text-gray-400 font-bold uppercase text-xs mb-1"
+              style={{ color: "#9ca3af" }}
+            >
+              Overall Score
+            </label>
+            <div
+              className="font-bold text-lg text-blue-600"
+              style={{ color: "#2563eb" }}
+            >
+              {Number(evaluationForm.overallScore || 0).toFixed(2)} / 5.00
+            </div>
+          </div>
+
+          {/* Evaluation Period */}
+          <div>
+            <label
+              className="block text-gray-400 font-bold uppercase text-xs mb-1"
+              style={{ color: "#9ca3af" }}
+            >
+              Evaluation Period
+            </label>
+            <select
+              value={evaluationForm.periodCovered}
+              onChange={(e) =>
+                handlers.handleFormChange("periodCovered", e.target.value)
+              }
+              disabled={isReadOnly}
+              className="bg-transparent border-b border-gray-300 w-full outline-none font-medium"
+            >
+              <option value="">Select Period...</option>
+              <option value="Midterm Evaluation">Midterm Evaluation</option>
+              <option value="Final Evaluation">Final Evaluation</option>
+            </select>
+          </div>
+
+          {/* Period Months */}
+          <div className="flex gap-2">
+            <div className="w-1/2">
+              <label
+                className="block text-gray-400 font-bold uppercase text-xs mb-1"
+                style={{ color: "#9ca3af" }}
+              >
+                Start Month
+              </label>
+              <select
+                value={evaluationForm.periodStartMonth}
+                onChange={(e) =>
+                  handlers.handleFormChange(
+                    "periodStartMonth",
+                    e.target.value
+                  )
+                }
+                disabled={isReadOnly}
+                className="bg-transparent border-b border-gray-300 w-full outline-none"
+              >
+                <option value="">Month</option>
+                {MONTHS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="w-1/2">
+              <label
+                className="block text-gray-400 font-bold uppercase text-xs mb-1"
+                style={{ color: "#9ca3af" }}
+              >
+                End Month
+              </label>
+              <select
+                value={evaluationForm.periodEndMonth}
+                onChange={(e) =>
+                  handlers.handleFormChange(
+                    "periodEndMonth",
+                    e.target.value
+                  )
+                }
+                disabled={isReadOnly}
+                className="bg-transparent border-b border-gray-300 w-full outline-none"
+              >
+                <option value="">Month</option>
+                {MONTHS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* SECTIONS */}
+        {formTemplate.sections.length === 0 ? (
+          <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-lg">
+            <p className="text-gray-400 italic mb-4">
+              No questions have been set up for this evaluation.
+            </p>
+            {!isReadOnly && (
+              <button
+                onClick={() => setIsBuilderMode(true)}
+                className="text-blue-600 font-bold hover:underline"
+              >
+                Go to Template Builder
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {formTemplate.sections.map((section) => (
+              <div key={section.id} className="break-inside-avoid">
+                <div
+                  className="flex justify-between items-center text-white px-4 py-2 rounded mb-4"
+                  style={{ backgroundColor: "#002B66" }}
+                >
+                  <h3 className="font-bold">{section.title}</h3>
+                  <span className="text-xs bg-white/20 px-2 py-0.5 rounded">
+                    Avg:{" "}
+                    {data.calculateSectionScore(
+                      evaluationForm[section.id]
+                    ).toFixed(2)}
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  {section.items.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-2 border-b border-gray-100 last:border-0 px-2"
+                      style={{ borderColor: "#f3f4f6" }}
+                    >
+                      <div
+                        className="w-full sm:w-2/3 text-sm text-gray-800 mb-2 sm:mb-0"
+                        style={{ color: "#1f2937" }}
+                      >
+                        <span
+                          className="font-bold text-gray-400 mr-2"
+                          style={{ color: "#9ca3af" }}
+                        >
+                          {idx + 1}.
+                        </span>
+                        {item.text}
+                      </div>
+                      <div className="flex gap-1 self-end sm:self-auto">
+                        {data.ratingScale.map((scale) => (
+                          <label
+                            key={scale.value}
+                            className="cursor-pointer"
+                          >
+                            <input
+                              type="radio"
+                              name={`${section.id}_${item.id}`}
+                              value={scale.value}
+                              checked={
+                                (evaluationForm[section.id] || {})[
+                                  item.id
+                                ] === scale.value
+                              }
+                              onChange={() =>
+                                handlers.handleRatingChange(
+                                  section.id,
+                                  item.id,
+                                  scale.value
+                                )
+                              }
+                              disabled={isReadOnly}
+                              className="hidden"
+                            />
+                            <div
+                              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border transition-colors"
+                              style={{
+                                backgroundColor:
+                                  (evaluationForm[section.id] || {})[
+                                    item.id
+                                  ] === scale.value
+                                    ? "#2563eb"
+                                    : "#ffffff",
+                                color:
+                                  (evaluationForm[section.id] || {})[
+                                    item.id
+                                  ] === scale.value
+                                    ? "#ffffff"
+                                    : "#9ca3af",
+                                borderColor:
+                                  (evaluationForm[section.id] || {})[
+                                    item.id
+                                  ] === scale.value
+                                    ? "#2563eb"
+                                    : "#e5e7eb"
+                              }}
+                            >
+                              {scale.range}
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ESSAYS */}
+        {formTemplate.essays.length > 0 && (
+          <div className="mt-10 break-inside-avoid">
+            <h3
+              className="font-bold px-4 py-2 rounded mb-4 uppercase text-sm tracking-wide"
+              style={{ backgroundColor: "#f3f4f6", color: "#374151" }}
+            >
+              Qualitative Feedback
+            </h3>
+            <div className="space-y-6">
+              {formTemplate.essays.map((essay) => (
+                <div key={essay.id}>
+                  <label
+                    className="block text-gray-800 font-bold text-sm mb-2"
+                    style={{ color: "#1f2937" }}
+                  >
+                    {essay.question}
+                  </label>
+                  <textarea
+                    value={
+                      (evaluationForm.essayQuestions || {})[essay.id] ||
+                      ""
+                    }
+                    onChange={(e) =>
+                      handlers.handleEssayAnswerChange(
+                        essay.id,
+                        e.target.value
+                      )
+                    }
+                    disabled={isReadOnly}
+                    className="w-full border border-gray-200 rounded p-3 text-sm outline-none resize-none"
+                    style={{
+                      backgroundColor: "#f9fafb",
+                      borderColor: "#e5e7eb",
+                      color: "#111827"
+                    }}
+                    rows={3}
+                    placeholder={essay.placeholder}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* SIGNATURE */}
+        <div
+          className="mt-16 pt-6 border-t border-gray-300 break-inside-avoid"
+          style={{ borderColor: "#d1d5db" }}
+        >
+          <div className="w-64">
+            <input
+              type="text"
+              value={evaluationForm.supervisorName}
+              onChange={(e) =>
+                handlers.handleFormChange("supervisorName", e.target.value)
+              }
+              disabled={isReadOnly}
+              className="w-full border-b border-black pb-1 outline-none font-bold text-lg bg-transparent"
+              placeholder="Supervisor Name"
+            />
+            <div
+              className="text-xs text-gray-500 mt-1"
+              style={{ color: "#6b7280" }}
+            >
+              Supervisor Signature
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {!isReadOnly && (
+        <div className="flex justify-end gap-4 mt-8 pb-10">
+          <button
+            onClick={() => handlers.handleSaveEvaluation("draft")}
+            className="px-6 py-3 border rounded-lg hover:bg-gray-50 text-gray-600 font-medium"
+          >
+            Save Draft
+          </button>
+          <button
+            onClick={() => handlers.handleSaveEvaluation("submitted")}
+            className="px-6 py-3 bg-[#0094FF] text-white rounded-lg hover:bg-[#002B66] shadow-lg font-bold"
+          >
+            Submit Final Evaluation
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- MAIN WRAPPER ---
+
+const TabSection = ({ currentTab, data, user, handlers }) => {
+  if (currentTab === "dashboard") {
+    return (
+      <div className="bg-white p-8 rounded-lg border shadow-sm">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-bold text-gray-800">
+            Performance Evaluations
+          </h2>
+          <button
+            onClick={() => {
+              handlers.resetForm();
+              handlers.setActiveView("form");
+            }}
+            className="bg-[#0094FF] text-white px-4 py-2 rounded-lg font-bold hover:bg-[#002B66]"
+          >
+            Create New Evaluation
+          </button>
+        </div>
+
+        {data.evaluations.length === 0 ? (
+          <p className="text-gray-400">No evaluations found.</p>
+        ) : (
+          <div className="space-y-4">
+            {data.evaluations.map((ev) => (
+              <div
+                key={ev.id}
+                className="border p-4 rounded-lg flex justify-between items-center hover:bg-gray-50"
+              >
+                <div>
+                  <div className="font-bold text-lg">{ev.internName}</div>
+                  <div className="text-sm text-gray-500">
+                    {ev.title || ev.periodCovered}
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span
+                    className={`px-3 py-1 rounded text-xs font-bold uppercase ${
+                      ev.status === "draft"
+                        ? "bg-yellow-100 text-yellow-700"
+                        : "bg-green-100 text-green-700"
+                    }`}
+                  >
+                    {ev.status}
+                  </span>
+                  <button
+                    onClick={() => handlers.handleEditEvaluation(ev)}
+                    className="text-blue-600 hover:underline"
+                  >
+                    {ev.status === "draft" ? "Edit" : "View"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (currentTab === "form") {
+    return (
+      <EvaluationForm data={data} handlers={handlers} user={user} />
+    );
+  }
+
+  return (
+    <div className="p-10 text-center">
+      Select a tab from the menu
+    </div>
+  );
+};
+
+export default TabSection;

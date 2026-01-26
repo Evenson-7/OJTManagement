@@ -1,0 +1,1576 @@
+// fileName: TabSection.jsx (UPDATED for 1-5 Scale)
+
+import React from 'react';
+import toast from 'react-hot-toast'; 
+// Import icons from react-icons
+import { 
+  HiArrowLeft, 
+  HiOutlinePencil, 
+  HiOutlineEye, 
+  HiOutlineUser,
+  HiOutlineCheckBadge, 
+  HiOutlineUsers, 
+  HiOutlinePencilSquare, 
+  HiOutlineCheck, 
+  HiOutlineExclamationTriangle, 
+  HiOutlineTrophy, 
+  HiOutlineChartBar, 
+  HiOutlineStar, 
+  HiOutlineCalendar, 
+  HiOutlineClipboardDocumentList, 
+  HiOutlineChartPie, 
+  HiOutlineCheckCircle, 
+  HiArrowTrendingUp, 
+  HiArrowTrendingDown, 
+  HiArrowRight,
+  HiOutlineArchiveBox
+} from "react-icons/hi2";
+
+
+// --- Color Utility Classes ---
+const ACCENT_COLOR = 'text-[#0094FF]'; // Deep Blue Accent
+const PRIMARY_ACTION_BG = 'bg-[#0094FF]';
+const PRIMARY_ACTION_HOVER_BG = 'hover:bg-[#002B66]';
+const LIGHT_BG = 'bg-[#BDE4F7]'; // Light Cyan Tint
+const LIGHT_HOVER_BG = 'hover:bg-[#BDE4F7]';
+const ACCENT_BORDER = 'border-[#42A5FF]'; // Sky Blue Border
+const SUCCESS_TEXT = 'text-[#002B66]'; // Navy for Success Text
+const SUCCESS_BG = 'bg-[#BDE4F7]'; // Light Cyan for Success BG
+const DRAFT_TEXT = 'text-[#42A5FF]'; // Sky Blue for Draft Text
+const DRAFT_BG = 'bg-[#E0F7FA]'; // Slightly Lighter Blue/Cyan for Draft BG
+
+
+// --- Utility Functions ---
+const getSafeName = (intern) => {
+  if (!intern) return 'Unknown';
+  return intern.internName || intern.fullName || intern.name || intern.displayName || intern.email || 'Unknown';
+};
+
+const getFirstChar = (name) => {
+  const safeName = getSafeName({ internName: name });
+  return safeName.charAt(0).toUpperCase();
+};
+
+// --- Helper Components ---
+
+// Helper function to get trend icon
+function getTrendIcon(trend) {
+  if (trend === 'Improving') return <HiArrowTrendingUp className="w-5 h-5 text-green-500" />;
+  if (trend === 'Declining') return <HiArrowTrendingDown className="w-5 h-5 text-red-500" />;
+  return <HiArrowRight className="w-5 h-5 text-gray-400" />;
+}
+
+// Helper component for the stats cards
+function StatCard({ title, value, icon, change, changeType }) {
+  const ACCENT_COLOR = 'text-[#0094FF]'; 
+  const LIGHT_BG = 'bg-[#BDE4F7]'; 
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-500">{title}</p>
+          <p className="text-3xl font-bold text-gray-900">{value}</p>
+        </div>
+        <div className={`${LIGHT_BG} ${ACCENT_COLOR} p-3 rounded-full`}> 
+          {icon}
+        </div>
+      </div>
+      {change && (
+        <div className={`mt-3 flex items-center text-sm ${
+          changeType === 'increase' ? 'text-green-600' :
+          changeType === 'decrease' ? 'text-red-600' : 'text-gray-500'
+        }`}>
+          {changeType === 'increase' ? <HiArrowTrendingUp className="w-5 h-5 mr-1" /> :
+           changeType === 'decrease' ? <HiArrowTrendingDown className="w-5 h-5 mr-1" /> :
+           <HiArrowRight className="w-5 h-5 mr-1" />}
+          <span>{change}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Main TabSection Component ---
+const TabSection = ({ currentTab, data, user, handlers }) => {
+  const {
+    evaluations = [], myInterns = [], internRankings = [], myBadges = [], 
+    performanceData = {}, evaluationForm = {}, loading = false, evaluationSubmitting = false,
+    currentFormPage = 1, editingEvaluation = null, isEditMode = false, ratingScale = [],
+    evaluationSections = {}, essayQuestions = [], badgeDefinitions = [],
+    calculateSectionScore = () => 0, calculateOverallScore = () => 0,
+    getPerformanceRating = () => ({ label: 'Not Rated', color: 'text-gray-600', bgColor: 'bg-gray-100' }),
+    getSectionIcon = () => '📊'
+  } = data || {};
+
+  const {
+    handleEditEvaluation = () => {}, handleViewEvaluation = () => {}, handleDeleteEvaluation = () => {},
+    resetEvaluationForm = () => {}, setActiveView = () => {}, setCurrentFormPage = () => {},
+    handleRatingChange = () => {}, handleEssayChange = () => {}, handleInternSelection = () => {},
+    handleSaveEvaluation = () => {}, handleFormChange = () => {},
+    handleViewCertificate = () => {} 
+  } = handlers || {};
+
+  switch (currentTab) {
+    case 'dashboard':
+      return user?.role === 'supervisor' ? (
+        <SupervisorDashboard 
+          evaluations={evaluations} myInterns={myInterns} resetEvaluationForm={resetEvaluationForm} 
+          setActiveView={setActiveView} handleViewEvaluation={handleViewEvaluation} 
+          handleEditEvaluation={handleEditEvaluation} handleDeleteEvaluation={handleDeleteEvaluation}
+        />
+      ) : (
+        <InternDashboard 
+          evaluations={evaluations} 
+          myBadges={myBadges} 
+          setActiveView={setActiveView} 
+          handleViewEvaluation={handleViewEvaluation}
+          handleViewCertificate={handleViewCertificate}
+        />
+      );
+
+    case 'rankings':
+      return <RankingsSection internRankings={internRankings} user={user} />;
+
+    case 'badges':
+      return <BadgesSection myBadges={myBadges} badgeDefinitions={badgeDefinitions} />;
+
+    case 'performance':
+      return <PerformanceSection 
+        evaluations={evaluations} performanceData={performanceData} user={user} 
+        handleViewEvaluation={handleViewEvaluation}
+        getSectionIcon={getSectionIcon} 
+      />;
+
+    case 'form':
+      return <TwoPageEvaluationForm 
+        evaluationForm={evaluationForm} myInterns={myInterns} loading={loading} 
+        evaluationSubmitting={evaluationSubmitting} currentFormPage={currentFormPage} 
+        editingEvaluation={editingEvaluation} isEditMode={isEditMode} resetEvaluationForm={resetEvaluationForm} 
+        setActiveView={setActiveView} setCurrentFormPage={setCurrentFormPage} 
+        handleRatingChange={handleRatingChange} handleEssayChange={handleEssayChange} 
+        handleInternSelection={handleInternSelection} handleSaveEvaluation={handleSaveEvaluation} 
+        calculateSectionScore={calculateSectionScore} calculateOverallScore={calculateOverallScore} 
+        ratingScale={ratingScale} evaluationSections={evaluationSections} essayQuestions={essayQuestions} 
+        user={user} data={data} 
+        handleFormChange={handleFormChange} 
+      />;
+
+    default:
+      return <div>Unknown section</div>;
+  }
+};
+
+// --- SupervisorDashboard Component ---
+function SupervisorDashboard({ 
+  evaluations = [], myInterns = [], resetEvaluationForm, setActiveView,
+  handleViewEvaluation, handleEditEvaluation, handleDeleteEvaluation
+}) {
+  return (
+    <div className="space-y-6">
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        
+        {/* My Interns */}
+        <div className={`${SUCCESS_BG} border ${ACCENT_BORDER} rounded-lg p-4`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-sm ${ACCENT_COLOR} font-medium`}>My Interns</p>
+              <p className={`text-2xl font-bold ${SUCCESS_TEXT}`}>{myInterns.length}</p>
+            </div>
+            <div className={`${SUCCESS_BG} p-2 rounded-lg ${ACCENT_COLOR}`}>
+              <HiOutlineUsers className="w-6 h-6" /> 
+            </div>
+          </div>
+        </div>
+        
+        {/* Completed */}
+        <div className={`bg-green-50 border border-green-200 rounded-lg p-4`}> 
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-green-600 font-medium">Completed</p>
+              <p className="text-2xl font-bold text-green-900">
+                {evaluations.filter(evaluation => evaluation?.status === "completed" || evaluation?.status === "submitted").length}
+              </p>
+            </div>
+            <div className="bg-green-100 p-2 rounded-lg text-green-700">
+              <HiOutlineCheck className="w-6 h-6" /> 
+            </div>
+          </div>
+        </div>
+        
+        {/* In Progress */}
+        <div className={`${DRAFT_BG} border ${ACCENT_BORDER} rounded-lg p-4`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-sm ${DRAFT_TEXT} font-medium`}>In Progress</p>
+              <p className={`text-2xl font-bold ${ACCENT_COLOR}`}>
+                {evaluations.filter(evaluation => evaluation?.status === "draft").length}
+              </p>
+            </div>
+            <div className={`${DRAFT_BG} p-2 rounded-lg ${DRAFT_TEXT}`}>
+              <HiOutlinePencilSquare className="w-6 h-6" />
+            </div>
+          </div>
+        </div>
+
+        {/* This Month */}
+        <div className={`${LIGHT_BG} border ${ACCENT_BORDER} rounded-lg p-4`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-sm ${ACCENT_COLOR} font-medium`}>This Month</p>
+              <p className={`text-2xl font-bold ${SUCCESS_TEXT}`}>
+                {evaluations.filter(evaluation => {
+                  if (!evaluation?.createdAt) return false;
+                  try {
+                    const evalDate = new Date(evaluation.createdAt.toDate ? evaluation.createdAt.toDate() : evaluation.createdAt);
+                    const now = new Date();
+                    return evalDate.getMonth() === now.getMonth() && evalDate.getFullYear() === now.getFullYear();
+                  } catch (error) {
+                    return false;
+                  }
+                }).length}
+              </p>
+            </div>
+            <div className={`${LIGHT_BG} p-2 rounded-lg ${ACCENT_COLOR}`}>
+              <HiOutlineCalendar className="w-6 h-6" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6 ">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <button
+            onClick={() => {
+              resetEvaluationForm && resetEvaluationForm();
+              setActiveView && setActiveView("form");
+            }}
+            disabled={myInterns.length === 0}
+            className={`p-6 border-2 border-dashed ${ACCENT_BORDER} rounded-lg hover:border-[#0094FF] ${LIGHT_HOVER_BG} transition-colors text-center disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            <div className={`text-4xl mb-3 ${ACCENT_COLOR} flex justify-center`}><HiOutlinePencil className="w-10 h-10" /></div>
+            <div className={`font-medium ${ACCENT_COLOR} mb-1`}>Create New Evaluation</div>
+            <div className="text-sm text-gray-600">Start a new evaluation for your assigned interns</div>
+            {myInterns.length === 0 && (
+              <div className="text-xs text-amber-600 mt-2">
+                <HiOutlineExclamationTriangle className="w-4 h-4 mr-1 inline" /> No interns assigned - use Manage tab
+              </div>
+            )}
+          </button>
+          
+          <button 
+            onClick={() => setActiveView && setActiveView("rankings")}
+            className={`p-6 border-2 border-dashed ${ACCENT_BORDER} rounded-lg hover:border-[#0094FF] ${LIGHT_HOVER_BG} transition-colors text-center`}
+          >
+            <div className={`text-4xl mb-3 ${ACCENT_COLOR} flex justify-center`}><HiOutlineTrophy className="w-10 h-10" /></div>
+            <div className={`font-medium ${ACCENT_COLOR} mb-1`}>View Rankings</div>
+            <div className="text-sm text-gray-600">See intern performance rankings</div>
+          </button>
+
+          <button 
+            onClick={() => setActiveView && setActiveView("performance")}
+            className={`p-6 border-2 border-dashed border-green-300 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors text-center`}
+          >
+            <div className="text-4xl mb-3 text-green-600 flex justify-center"><HiOutlineChartBar className="w-10 h-10" /></div>
+            <div className="font-medium text-green-600 mb-1">Performance Analytics</div>
+            <div className="text-sm text-gray-600">View intern performance analytics</div>
+          </button>
+        </div>
+      </div>
+
+      {/* Recent Evaluations */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Recent Evaluations</h3>
+          <button 
+            onClick={() => {
+              resetEvaluationForm && resetEvaluationForm();
+              setActiveView && setActiveView("form");
+            }}
+            disabled={myInterns.length === 0}
+            className={`${PRIMARY_ACTION_BG} text-white px-4 py-2 rounded-lg ${PRIMARY_ACTION_HOVER_BG} transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            Create New
+          </button>
+        </div>
+        
+        {evaluations && evaluations.length > 0 ? (
+          <div className="space-y-3">
+            {evaluations.slice(0, 5).map((evaluation) => (
+              <div key={evaluation?.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
+                <div className="flex items-center space-x-4">
+                  <div className={`w-3 h-3 rounded-full ${
+                    evaluation?.status === "completed" || evaluation?.status === "submitted" ? "bg-green-500" :
+                    evaluation?.status === "draft" ? "bg-yellow-500" : "bg-gray-400"
+                  }`}></div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-900">{evaluation?.title || 'Untitled Evaluation'}</h4>
+                    <p className="text-sm text-gray-600">
+                      Intern: {evaluation?.internName || 'Unknown'} • 
+                      Status: {evaluation?.status || 'Draft'} •
+                      Score: {evaluation?.overallScore ? Number(evaluation.overallScore).toFixed(2) : 'Not scored'}
+                    </p>
+                    
+                    {evaluation?.overallScore && evaluation?.performanceRating && (
+                      <div className="flex items-center space-x-2 mt-2">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          evaluation.performanceRating.bgColor || 'bg-gray-100'
+                        } ${evaluation.performanceRating.color || 'text-gray-600'}`}>
+                          {evaluation.performanceRating.label || 'Not Rated'}
+                        </span>
+                      </div>
+                    )}
+                    
+                    <p className="text-xs text-gray-500 mt-1">
+                      {evaluation?.createdAt ? (() => {
+                        try {
+                          return new Date(evaluation.createdAt.toDate ? evaluation.createdAt.toDate() : evaluation.createdAt).toLocaleDateString();
+                        } catch (error) {
+                          return 'Recently created';
+                        }
+                      })() : 'Recently created'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex space-x-2">
+                  <button 
+                    onClick={() => handleViewEvaluation && handleViewEvaluation(evaluation)}
+                    className={`${SUCCESS_BG} ${ACCENT_COLOR} px-3 py-1 rounded text-sm ${LIGHT_HOVER_BG} transition-colors`}
+                  >
+                    View
+                  </button>
+                  {evaluation?.status === "draft" && (
+                    <>
+                      <button 
+                        onClick={() => handleEditEvaluation && handleEditEvaluation(evaluation)}
+                        className="px-3 py-1 bg-orange-100 text-orange-700 rounded text-sm hover:bg-orange-200 transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteEvaluation && handleDeleteEvaluation(evaluation.id)}
+                        className="px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <div className="text-gray-400 mb-4 flex justify-center">
+              <HiOutlineClipboardDocumentList className="w-16 h-16" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No evaluations yet</h3>
+            <p className="text-gray-500 mb-4">Create your first evaluation to get started</p>
+            {myInterns.length > 0 ? (
+              <button
+                onClick={() => {
+                  resetEvaluationForm && resetEvaluationForm();
+                  setActiveView && setActiveView("form");
+                }}
+                className={`${PRIMARY_ACTION_BG} text-white px-6 py-3 rounded-lg ${PRIMARY_ACTION_HOVER_BG} transition-colors`}
+              >
+                Create Evaluation
+              </button>
+            ) : (
+              <p className="text-sm text-amber-600">
+                <HiOutlineExclamationTriangle className="w-4 h-4 mr-1 inline" /> Please assign interns using the Manage tab first
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- InternDashboard Component ---
+function InternDashboard({ evaluations = [], myBadges = [], setActiveView, handleViewEvaluation, handleViewCertificate }) {
+  return (
+    <div className="space-y-6">
+      {/* Performance Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Latest Score */}
+        <div className={`${SUCCESS_BG} border ${ACCENT_BORDER} rounded-lg p-4`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-sm ${ACCENT_COLOR} font-medium`}>Latest Score</p>
+              <p className={`text-2xl font-bold ${SUCCESS_TEXT}`}>
+                {evaluations.length > 0 ? (evaluations[0]?.overallScore ? Number(evaluations[0].overallScore).toFixed(2) : "N/A") : "N/A"}
+              </p>
+              <p className={`text-xs ${ACCENT_COLOR}`}>
+                {evaluations.length > 0 && evaluations[0]?.performanceRating ? 
+                  evaluations[0].performanceRating.label : 'Not evaluated yet'}
+              </p>
+            </div>
+            <div className={`${SUCCESS_BG} p-2 rounded-lg ${ACCENT_COLOR}`}>
+              <HiOutlineStar className="w-6 h-6" />
+            </div>
+          </div>
+        </div>
+        
+        {/* Evaluations Completed */}
+        <div className={`bg-green-50 border border-green-200 rounded-lg p-4`}> 
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-green-600 font-medium">Evaluations</p>
+              <p className="text-2xl font-bold text-green-900">{evaluations.length}</p>
+              <p className="text-xs text-green-600">Completed</p>
+            </div>
+            <div className="bg-green-100 p-2 rounded-lg text-green-700">
+              <HiOutlineChartBar className="w-6 h-6" />
+            </div>
+          </div>
+        </div>
+        
+        {/* Badges Earned */}
+        <div className={`${LIGHT_BG} border ${ACCENT_BORDER} rounded-lg p-4`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-sm ${ACCENT_COLOR} font-medium`}>Badges Earned</p>
+              <p className={`text-2xl font-bold ${SUCCESS_TEXT}`}>{myBadges.length}</p>
+              <p className={`text-xs ${ACCENT_COLOR}`}>Achievements</p>
+            </div>
+            <div className={`${LIGHT_BG} p-2 rounded-lg ${ACCENT_COLOR}`}>
+              <HiOutlineCheckBadge className="w-6 h-6" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Actions for Interns */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <button 
+            onClick={() => setActiveView && setActiveView("rankings")}
+            className={`p-6 border-2 border-dashed ${ACCENT_BORDER} rounded-lg hover:border-[#0094FF] ${LIGHT_HOVER_BG} transition-colors text-center`}
+          >
+            <div className={`text-4xl mb-3 ${ACCENT_COLOR} flex justify-center`}><HiOutlineTrophy className="w-10 h-10" /></div>
+            <div className={`font-medium ${ACCENT_COLOR} mb-1`}>View Rankings</div>
+            <div className="text-sm text-gray-600">See how you rank among other interns</div>
+          </button>
+          
+          <button 
+            onClick={() => setActiveView && setActiveView("badges")}
+            className={`p-6 border-2 border-dashed border-yellow-300 rounded-lg hover:border-yellow-500 hover:bg-yellow-50 transition-colors text-center`}
+          >
+            <div className="text-4xl mb-3 text-yellow-600 flex justify-center"><HiOutlineCheckBadge className="w-10 h-10" /></div>
+            <div className="font-medium text-yellow-600 mb-1">My Badges</div>
+            <div className="text-sm text-gray-600">View earned achievement badges</div>
+          </button>
+          
+          <button 
+            onClick={() => setActiveView && setActiveView("performance")}
+            className={`p-6 border-2 border-dashed border-green-300 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors text-center`}
+          >
+            <div className="text-4xl mb-3 text-green-600 flex justify-center"><HiOutlineChartBar className="w-10 h-10" /></div>
+            <div className="font-medium text-green-600 mb-1">Performance</div>
+            <div className="text-sm text-gray-600">Track your progress over time</div>
+          </button>
+        </div>
+      </div>
+
+      {/* Recent Evaluations for Interns */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">My Evaluations</h3>
+        
+        {evaluations && evaluations.length > 0 ? (
+          <div className="space-y-4">
+            {evaluations.map((evaluation) => (
+              <div key={evaluation?.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
+                <div className="flex items-center space-x-4">
+                  <div className={`w-12 h-12 ${SUCCESS_BG} rounded-lg flex items-center justify-center ${ACCENT_COLOR}`}>
+                    <HiOutlineArchiveBox className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-900">{evaluation?.title || 'Evaluation'}</h4>
+                    <p className="text-sm text-gray-600">
+                      Score: {evaluation?.overallScore ? Number(evaluation.overallScore).toFixed(2) : 'Not scored'} • 
+                      Date: {evaluation?.createdAt ? (() => {
+                        try {
+                          return new Date(evaluation.createdAt.toDate ? evaluation.createdAt.toDate() : evaluation.createdAt).toLocaleDateString();
+                        } catch (error) {
+                          return 'Recently';
+                        }
+                      })() : 'Recently'}
+                    </p>
+                    
+                    {evaluation?.performanceRating && (
+                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium mt-1 ${
+                        evaluation.performanceRating.bgColor || 'bg-gray-100'
+                      } ${evaluation.performanceRating.color || 'text-gray-600'}`}>
+                        {evaluation.performanceRating.label || 'Not Rated'}
+                      </span>
+                    )}
+                    
+                    <p className="text-xs text-gray-500 mt-1">
+                      By: {evaluation?.supervisorName || 'Supervisor'} • 
+                      Period: {evaluation?.periodCovered || 'Not specified'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2"> 
+                  <button 
+                    onClick={() => handleViewEvaluation && handleViewEvaluation(evaluation)}
+                    className={`${SUCCESS_BG} ${ACCENT_COLOR} px-4 py-2 rounded-lg text-sm ${LIGHT_HOVER_BG} transition-colors`}
+                  >
+                    View Details
+                  </button>
+
+                  {evaluation.periodCovered === "Final Evaluation" && (evaluation.status === "submitted" || evaluation.status === "completed") && (
+                    <button 
+                      onClick={() => handleViewCertificate(evaluation)}
+                      className={`px-4 py-2 bg-[#002B66] text-white rounded-lg text-sm hover:bg-[#004799] transition-colors`}
+                    >
+                      View Certificate
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <div className="text-gray-400 mb-4 flex justify-center">
+              <HiOutlineStar className="w-16 h-16" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No evaluations yet</h3>
+            <p className="text-gray-500">Your supervisor will create evaluations for you</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- RankingsSection Component ---
+function RankingsSection({ internRankings = [], user }) {
+  return (
+    <div className="space-y-6">
+      <div className="text-center mb-8">
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">Rankings</h2>
+        <p className="text-gray-600">Based on average evaluation scores (Scale 1-5)</p>
+      </div>
+
+      {/* Full Rankings Table */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Complete Rankings</h3>
+        </div>
+        
+        {internRankings.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Intern</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Score</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Performance</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Latest</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Evaluations</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {internRankings.map((intern, index) => (
+                  <tr key={intern?.internId || index} className={`${
+                    user?.role === "intern" && intern?.internId === user?.uid ? SUCCESS_BG : ''
+                  } hover:bg-gray-50`}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        {index + 1 <= 3 ? (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            index === 0 ? 'bg-yellow-100 text-yellow-800' :
+                            index === 1 ? 'bg-gray-100 text-gray-800' :
+                            'bg-orange-100 text-orange-800'
+                          }`}>
+                            #{index + 1}
+                          </span>
+                        ) : (
+                          <span className="text-lg font-semibold text-gray-600">#{index + 1}</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-10 w-10">
+                          <div className={`h-10 w-10 rounded-full ${SUCCESS_BG} flex items-center justify-center`}>
+                            <span className={`${ACCENT_COLOR} text-sm font-medium`}>
+                              {getFirstChar(getSafeName(intern))}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">{getSafeName(intern)}</div>
+                          {user?.role === "intern" && intern?.internId === user?.uid && (
+                            <div className={`text-xs ${ACCENT_COLOR}`}>👤 You</div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{intern?.department || 'No Department'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="text-lg font-bold text-gray-900">{intern?.averageScore ? Number(intern.averageScore).toFixed(2) : 0}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {intern?.performanceRating && (
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          intern.performanceRating.bgColor || 'bg-gray-100'
+                        } ${intern.performanceRating.color || 'text-gray-600'}`}>
+                          {intern.performanceRating.label || 'Not Rated'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{intern?.latestScore ? Number(intern.latestScore).toFixed(2) : 0}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{intern?.totalEvaluations || 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <div className="text-gray-400 mb-4 flex justify-center">
+              <HiOutlineTrophy className="w-16 h-16" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No rankings available</h3>
+            <p className="text-gray-500">Complete some evaluations to see rankings</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- BadgesSection Component ---
+function BadgesSection({ myBadges = [], badgeDefinitions = [] }) {
+  return (
+    <div className="space-y-6">
+      <div className="text-center mb-8">
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">Achievement Badges</h2>
+        <p className="text-gray-600">Earn badges based on your evaluation performance</p>
+      </div>
+
+      {/* My Earned Badges */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">My Badges ({myBadges.length})</h3>
+        
+        {myBadges.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {myBadges.map((badge) => (
+              <div key={badge?.id} className={`bg-gradient-to-r ${badge?.color || 'from-gray-400 to-gray-600'} text-white rounded-lg p-4 shadow-lg transform hover:scale-105 transition-transform`}>
+                <div className="flex items-center space-x-3">
+                  <div className="text-3xl">{badge?.icon || <HiOutlineTrophy className="w-8 h-8" />}</div>
+                  <div>
+                    <h4 className="font-bold">{badge?.name || 'Unknown Badge'}</h4>
+                    <p className="text-sm opacity-90">{badge?.description || 'No description'}</p>
+                    <div className="text-xs mt-1 opacity-75">✓ Earned</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <div className="text-gray-400 mb-4 flex justify-center">
+              <HiOutlineCheckBadge className="w-16 h-16" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No badges earned yet</h3>
+            <p className="text-gray-500">Complete evaluations to earn achievement badges!</p>
+          </div>
+        )}
+      </div>
+
+      {/* All Available Badges */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">All Available Badges</h3>
+        
+        {badgeDefinitions.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {badgeDefinitions.map((badge) => {
+              const isEarned = myBadges.some(earned => earned?.id === badge?.id);
+              
+              return (
+                <div key={badge?.id} className={`rounded-lg p-4 border-2 transition-all ${
+                  isEarned 
+                    ? `bg-gradient-to-r ${badge?.color || 'from-gray-400 to-gray-600'} text-white border-transparent shadow-lg` 
+                    : 'bg-gray-50 text-gray-600 border-gray-200 border-dashed hover:border-gray-300'
+                }`}>
+                  <div className="flex items-center space-x-3">
+                    <div className={`text-3xl ${isEarned ? '' : 'grayscale opacity-50'}`}>
+                      {badge?.icon || <HiOutlineTrophy className="w-8 h-8" />}
+                    </div>
+                    <div>
+                      <h4 className={`font-bold ${isEarned ? 'text-white' : 'text-gray-700'}`}>{badge?.name || 'Unknown Badge'}</h4>
+                      <p className={`text-sm ${isEarned ? 'opacity-90' : 'text-gray-500'}`}>{badge?.description || 'No description'}</p>
+                      {isEarned && (
+                        <div className="text-xs mt-1 opacity-75">✓ Earned</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <p className="text-gray-500">No badges available</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- PerformanceSection Component ---
+function PerformanceSection({ evaluations = [], performanceData = {}, user, handleViewEvaluation }) {
+  const safePerformanceData = {
+    performanceInsights: performanceData?.performanceInsights || {},
+    internPerformance: performanceData?.internPerformance || [],
+    overallTrend: performanceData?.overallTrend || [],
+    strengths: performanceData?.strengths || [],
+    improvementAreas: performanceData?.improvementAreas || []
+  };
+
+  const submittedEvaluations = evaluations.filter(evaluation => 
+    evaluation?.status === "completed" || evaluation?.status === "submitted"
+  );
+  
+  return (
+    <div className="space-y-6">
+      <div className="text-center mb-8">
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">Performance Analytics</h2>
+        <p className="text-gray-600">
+          {user?.role === 'supervisor' 
+            ? "Track your assigned interns' performance throughout their OJT" 
+            : "Track your evaluation performance over time"}
+        </p>
+      </div>
+
+      {submittedEvaluations.length === 0 ? (
+        <div className="text-center py-12">
+          <div className="text-gray-400 mb-4 flex justify-center">
+            <HiOutlineChartBar className="w-16 h-16" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No Performance Data Yet</h3>
+          <p className="text-gray-500">
+            {user?.role === 'supervisor' 
+              ? "Complete evaluations for your interns to see performance analytics" 
+              : "Complete evaluations to see your performance analytics"}
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Performance Overview Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4"> 
+            {user?.role === 'supervisor' ? (
+              <>
+                <StatCard 
+                  title="Total Interns" 
+                  value={safePerformanceData.performanceInsights.totalInterns || 0}
+                  icon={<HiOutlineUsers className="w-6 h-6" />}
+                />
+                <StatCard 
+                  title="Total Evaluations" 
+                  value={safePerformanceData.performanceInsights.totalEvaluations || 0}
+                  icon={<HiOutlineClipboardDocumentList className="w-6 h-6" />}
+                />
+                <StatCard 
+                  title="Average Score" 
+                  value={safePerformanceData.performanceInsights.averageScore || 0}
+                  icon={<HiOutlineChartPie className="w-6 h-6" />}
+                />
+                <StatCard 
+                  title="Top Performers (4.5+)" 
+                  value={safePerformanceData.performanceInsights.topPerformers || 0}
+                  icon={<HiOutlineStar className="w-6 h-6" />}
+                />
+              </>
+            ) : (
+              <>
+                <StatCard 
+                  title="Total Evaluations" 
+                  value={safePerformanceData.performanceInsights.totalEvaluations || 0}
+                  icon={<HiOutlineClipboardDocumentList className="w-6 h-6" />}
+                />
+                <StatCard 
+                  title="Average Score" 
+                  value={safePerformanceData.performanceInsights.averageScore || 0}
+                  icon={<HiOutlineChartPie className="w-6 h-6" />}
+                />
+                <StatCard 
+                  title="Latest Score" 
+                  value={safePerformanceData.performanceInsights.latestScore || 0}
+                  icon={<HiOutlineStar className="w-6 h-6" />}
+                />
+                <StatCard 
+                  title="Consistency" 
+                  value={`${safePerformanceData.performanceInsights.consistencyScore || 100}%`}
+                  icon={<HiArrowTrendingUp className="w-6 h-6" />}
+                />
+              </>
+            )}
+          </div>
+
+          {/* Submitted Evaluations List */}
+          <div className="bg-white rounded-lg border border-gray-200 p-6"> 
+            <h3 className="text-lg font-semibold text-gray-900 mb-6">
+              <HiOutlinePencilSquare className="w-5 h-5 mr-2 inline" /> {user?.role === 'supervisor' ? 'All Submitted Evaluations' : 'My Submitted Evaluations'}
+            </h3>
+            <div className="space-y-4">
+              {submittedEvaluations.map(evaluation => (
+                <div key={evaluation.id} className="flex items-center justify-between p-4 border border-gray-100 rounded-lg hover:bg-gray-50">
+                  <div className="flex items-center space-x-4">
+                    <div className={`${SUCCESS_BG} rounded-lg flex items-center justify-center ${ACCENT_COLOR} w-12 h-12`}>
+                      <HiOutlineArchiveBox className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-gray-900">{evaluation.title || 'Evaluation'}</h4>
+                      <p className="text-sm text-gray-600">
+                        {user.role === 'supervisor' ? `Intern: ${evaluation.internName}` : `By: ${evaluation.supervisorName}`}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Score: {evaluation.overallScore ? Number(evaluation.overallScore).toFixed(2) : '0.00'} • 
+                        Date: {new Date(evaluation.submittedAt?.toDate() || evaluation.createdAt?.toDate() || Date.now()).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => handleViewEvaluation(evaluation)}
+                    className={`${SUCCESS_BG} ${ACCENT_COLOR} px-4 py-2 rounded-lg text-sm ${LIGHT_HOVER_BG} transition-colors`}
+                  >
+                    View
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Individual Intern Performance for Supervisors */}
+          {user?.role === 'supervisor' && safePerformanceData.internPerformance.length > 0 && (
+            <div className="bg-white rounded-lg border border-gray-200 p-6"> 
+              <h3 className="text-lg font-semibold text-gray-900 mb-6"><HiOutlineUsers className="w-5 h-5 mr-2 inline" /> Individual Intern Performance</h3>
+              <div className="space-y-4">
+                {safePerformanceData.internPerformance.map(intern => (
+                  <div key={intern.internId} className="p-4 border border-gray-100 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className={`h-10 w-10 rounded-full ${SUCCESS_BG} flex items-center justify-center`}>
+                          <span className={`text-sm font-medium ${ACCENT_COLOR}`}>
+                            {getFirstChar(intern.internName)}
+                          </span>
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-gray-900">{intern.internName}</h4>
+                          <p className="text-sm text-gray-600">{intern.department}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-6 text-center">
+                        <div>
+                          <p className="text-xs text-gray-500">Avg Score</p>
+                          <p className="text-xl font-bold text-gray-900">{intern.averageScore}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Trend</p>
+                          <div className="flex justify-center items-center">
+                            {getTrendIcon(intern.trend)}
+                            <span className="ml-1 text-sm font-medium">{intern.trend}</span>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Evaluations</p>
+                          <p className="text-xl font-bold text-gray-900">{intern.totalEvaluations}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Strengths and Improvement Areas for Interns */}
+          {user?.role === 'intern' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Strengths</h3>
+                
+                {safePerformanceData.strengths.length > 0 ? (
+                  <div className="space-y-3">
+                    {safePerformanceData.strengths.map((strength, index) => {
+                      const iconComponent = strength?.icon;
+                      return (
+                        <div key={index} className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-100">
+                          <div className="flex items-center">
+                            <span className="text-xl mr-3 text-green-700">{iconComponent}</span>
+                            <span className="font-medium text-gray-900">{strength.section}</span>
+                          </div>
+                          <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                            {strength.score}/5.00
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-4">Complete more evaluations to identify your strengths</p>
+                )}
+              </div>
+
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Areas for Improvement</h3>
+                
+                {safePerformanceData.improvementAreas.length > 0 ? (
+                  <div className="space-y-3">
+                    {safePerformanceData.improvementAreas.map((area, index) => {
+                      const iconComponent = area?.icon;
+                      return (
+                        <div key={index} className="p-3 bg-orange-50 rounded-lg border border-orange-100">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center">
+                              <span className="text-xl mr-3 text-orange-700">{iconComponent}</span>
+                              <span className="font-medium text-gray-900">{area.section}</span>
+                            </div>
+                            <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-sm font-medium">
+                              {area.score}/5.00
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600 ml-11">{area.suggestions}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-4">Great job! No major improvement areas identified</p>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+
+// --- TwoPageEvaluationForm Component (UPDATED: Added Reference Guide) ---
+function TwoPageEvaluationForm({
+  evaluationForm = {}, myInterns = [], loading = false, evaluationSubmitting = false,
+  currentFormPage = 1, editingEvaluation = null, isEditMode = false, resetEvaluationForm,
+  setActiveView, setCurrentFormPage, handleRatingChange, handleEssayChange,
+  handleInternSelection, handleSaveEvaluation, calculateSectionScore, calculateOverallScore,
+  ratingScale = [], evaluationSections = {}, essayQuestions = [], user, data,
+  handleFormChange 
+}) {
+
+  // Destructure the new component passed in data
+  const { CriteriaReferencePanel } = data || {};
+
+  const [currentPage, setCurrentPage] = React.useState(currentFormPage || 1);
+
+  React.useEffect(() => {
+    setCurrentPage(currentFormPage);
+  }, [currentFormPage]);
+
+  // Calculate overall score (Raw float, e.g. 4.25)
+  const safeCalculateOverallScore = () => {
+    try {
+      const score = calculateOverallScore ? calculateOverallScore(evaluationForm) : 0;
+      return typeof score === 'number' ? score : 0;
+    } catch (error) {
+      console.error("Error calculating overall score:", error);
+      return 0;
+    }
+  };
+
+  // Calculate section score (Raw float or int 1-5)
+  const safeCalculateSectionScore = (sectionData) => {
+    try {
+      const score = calculateSectionScore ? calculateSectionScore(sectionData || {}) : 0;
+      return typeof score === 'number' ? score : 0;
+    } catch (error) {
+      console.error("Error calculating section score:", error);
+      return 0;
+    }
+  };
+
+  const goToNextPage = () => {
+    if (currentPage === 1) {
+        if (!evaluationForm.internId && !editingEvaluation) {
+            toast.error("Please select an intern first.");
+            return;
+        }
+        if (!evaluationForm.periodStartMonth || !evaluationForm.periodEndMonth) {
+            toast.error("Please select both the Evaluation Start Month and End Month.");
+            return;
+        }
+        if (!evaluationForm.periodCovered) {
+            toast.error("Please select the Period Covered (Midterm/Final Evaluation).");
+            return;
+        }
+    }
+
+    if (currentPage < 2) {
+      const newPage = currentPage + 1;
+      setCurrentPage(newPage);
+      setCurrentFormPage && setCurrentFormPage(newPage);
+    }
+  };
+
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      const newPage = currentPage - 1;
+      setCurrentPage(newPage);
+      setCurrentFormPage && setCurrentFormPage(newPage);
+    }
+  };
+
+  const monthOptions = [
+    { value: "", label: "Select Month" },
+    { value: "January", label: "January" },
+    { value: "February", label: "February" },
+    { value: "March", label: "March" },
+    { value: "April", label: "April" },
+    { value: "May", label: "May" },
+    { value: "June", label: "June" },
+    { value: "July", label: "July" },
+    { value: "August", label: "August" },
+    { value: "September", label: "September" },
+    { value: "October", label: "October" },
+    { value: "November", label: "November" },
+    { value: "December", label: "December" }
+  ];
+
+  const periodOptions = [
+    { value: "", label: "Select Evaluation Type" },
+    { value: "Midterm Evaluation", label: "Midterm Evaluation" },
+    { value: "Final Evaluation", label: "Final Evaluation" }
+  ];
+
+
+  const getPageCompletion = (page) => {
+    if (page === 1) {
+      const totalRatings = Object.keys(evaluationSections).reduce((total, sectionKey) => {
+        return total + (evaluationSections[sectionKey]?.items?.length || 0);
+      }, 0);
+      
+      const completedRatings = Object.values(evaluationForm.behaviorAtWork || {}).filter(r => r).length + 
+                              Object.values(evaluationForm.academicPerformance || {}).filter(r => r).length +
+                              Object.values(evaluationForm.socialBehavior || {}).filter(r => r).length +
+                              Object.values(evaluationForm.personality || {}).filter(r => r).length +
+                              Object.values(evaluationForm.costConsciousness || {}).filter(r => r).length;
+      
+      return totalRatings > 0 ? Math.round((completedRatings / totalRatings) * 100) : 0;
+    } else {
+      const totalEssays = essayQuestions.length + 2; 
+      const completedEssays = Object.values(evaluationForm.essayQuestions || {}).filter(q => q?.trim()).length +
+                              (evaluationForm.supervisorName ? 1 : 0) +
+                              (evaluationForm.evaluationDate ? 1 : 0);
+      
+      return totalEssays > 0 ? Math.round((completedEssays / totalEssays) * 100) : 0;
+    }
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-8 bg-white rounded-lg shadow-xl border border-gray-200">
+      {/* Header with Stepper */}
+      <div className="bg-gray-50 border-b border-gray-200 p-8">
+        <div className="flex items-center justify-between mb-6">
+          <button
+            onClick={() => {
+              resetEvaluationForm && resetEvaluationForm();
+              setActiveView && setActiveView("dashboard");
+            }}
+            className="flex items-center px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <HiArrowLeft className="w-5 h-5 mr-2" />
+            Back to Dashboard
+          </button>
+          
+          {editingEvaluation && (
+            <div className={`px-4 py-2 rounded-full text-sm font-medium ${
+              isEditMode ? 'bg-orange-100 text-orange-800' : `${SUCCESS_BG} ${ACCENT_COLOR}`
+            }`}>
+              {isEditMode ? 'Editing Mode' : 'View Mode'}
+            </div>
+          )}
+        </div>
+
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            SITE SUPERVISOR'S EVALUATION OF STUDENT INTERN'S PERFORMANCE
+          </h1>
+          <p className="text-gray-600">Complete evaluation in 2 simple steps</p>
+        </div>
+
+        {/* Stepper Navigation */}
+        <div className="flex items-center justify-center space-x-8 mb-8">
+          <div className="flex items-center">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
+              currentPage >= 1 ? `${PRIMARY_ACTION_BG} text-white` : 'bg-gray-300 text-gray-600'
+            }`}>
+              1
+            </div>
+            <div className="ml-3">
+              <div className={`font-medium ${currentPage >= 1 ? ACCENT_COLOR : 'text-gray-500'}`}>
+                Rating Sections
+              </div>
+              <div className="text-sm text-gray-500">
+                {getPageCompletion(1)}% Complete
+              </div>
+            </div>
+          </div>
+          
+          <div className={`flex-1 h-1 rounded ${
+            currentPage >= 2 ? PRIMARY_ACTION_BG : 'bg-gray-300'
+          }`}></div>
+          
+          <div className="flex items-center">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
+              currentPage >= 2 ? `${PRIMARY_ACTION_BG} text-white` : 'bg-gray-300 text-gray-600'
+            }`}>
+              2
+            </div>
+            <div className="ml-3">
+              <div className={`font-medium ${currentPage >= 2 ? ACCENT_COLOR : 'text-gray-500'}`}>
+                Essay & Summary
+              </div>
+              <div className="text-sm text-gray-500">
+                {getPageCompletion(2)}% Complete
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Form Header Info */}
+        <div className="bg-white rounded-xl p-6 border border-gray-200">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+            
+            {/* Intern Selection */}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-3">
+                Intern's Name: <span className="text-red-500">*</span>
+              </label>
+              {!editingEvaluation ? (
+                <select
+                  value={evaluationForm.internId || ''}
+                  onChange={(e) => handleInternSelection && handleInternSelection(e.target.value)}
+                  className={`w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0094FF] focus:border-[#0094FF] transition-colors`}
+                  required
+                  disabled={evaluationSubmitting || loading}
+                >
+                  <option value="">
+                    {loading ? "Loading interns..." : "Choose an intern..."}
+                  </option>
+                  {myInterns.map(intern => (
+                    <option key={intern?.uid} value={intern?.uid}>
+                      {getSafeName(intern)} - {intern?.department || 'No Department'}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="px-4 py-3 bg-white border-2 border-gray-300 rounded-lg">
+                  <strong className="text-gray-900">{evaluationForm.internName}</strong>
+                </div>
+              )}
+              
+              {!loading && myInterns.length === 0 && (
+                <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-sm text-amber-800 flex items-center">
+                    <HiOutlineExclamationTriangle className="w-4 h-4 mr-2" />
+                    No interns assigned. Please use the Manage tab to assign interns first.
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            {/* Period Covered (Month Range and Type Dropdown) */}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-3">
+                Evaluation Month Range: <span className="text-red-500">*</span>
+              </label>
+              <div className="flex space-x-2 mb-3">
+                {/* Start Month Dropdown */}
+                <select
+                  value={evaluationForm.periodStartMonth || ''}
+                  onChange={(e) => handleFormChange('periodStartMonth', e.target.value)}
+                  className={`w-1/2 px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0094FF] focus:border-[#0094FF] transition-colors`}
+                  required
+                  disabled={evaluationSubmitting || (!isEditMode && editingEvaluation)}
+                >
+                  {monthOptions.map(option => (
+                    <option key={`start-${option.value}`} value={option.value} disabled={!option.value && true}>
+                      {option.value ? `${option.label} (Start)` : option.label}
+                    </option>
+                  ))}
+                </select>
+                {/* End Month Dropdown */}
+                <select
+                  value={evaluationForm.periodEndMonth || ''}
+                  onChange={(e) => handleFormChange('periodEndMonth', e.target.value)}
+                  className={`w-1/2 px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0094FF] focus:border-[#0094FF] transition-colors`}
+                  required
+                  disabled={evaluationSubmitting || (!isEditMode && editingEvaluation)}
+                >
+                  {monthOptions.map(option => (
+                    <option key={`end-${option.value}`} value={option.value} disabled={!option.value && true}>
+                      {option.value ? `${option.label} (End)` : option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <label className="block text-sm font-semibold text-gray-700 mb-3">
+                Period Covered by the Evaluation: <span className="text-red-500">*</span>
+              </label>
+              {/* Period Covered Dropdown */}
+              <select
+                value={evaluationForm.periodCovered || ''}
+                onChange={(e) => handleFormChange('periodCovered', e.target.value)}
+                className={`w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0094FF] focus:border-[#0094FF] transition-colors`}
+                required
+                disabled={evaluationSubmitting || (!isEditMode && editingEvaluation)}
+              >
+                {periodOptions.map(option => (
+                  <option key={option.value} value={option.value} disabled={!option.value && true}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {(!evaluationForm.internId && !editingEvaluation) ? (
+        <div className="text-center py-16 px-8">
+          <div className="text-gray-400 mb-6 flex justify-center">
+            <HiOutlineUser className="w-16 h-16" />
+          </div>
+          <h3 className="text-xl font-medium text-gray-900 mb-3">Select an Intern</h3>
+          <p className="text-gray-500 mb-6 max-w-md mx-auto">
+            Please select an intern from the dropdown above to start the evaluation process
+          </p>
+        </div>
+      ) : (
+        <div className="p-8">
+          {editingEvaluation && (
+            <div className={`${SUCCESS_BG} border ${ACCENT_BORDER} rounded-xl p-6 mb-8`}>
+              <div className="flex items-center justify-center space-x-2">
+                <HiOutlineUser className={`w-5 h-5 ${ACCENT_COLOR}`} />
+                <p className={`${SUCCESS_TEXT} font-medium text-sm md:text-base`}>
+                  <strong>Intern:</strong> {evaluationForm.internName} | 
+                  <strong> Period:</strong> {evaluationForm.periodCovered} ({evaluationForm.periodStartMonth} - {evaluationForm.periodEndMonth}) |
+                  <strong> Date:</strong> {evaluationForm.evaluationDate} |
+                  <strong> Status:</strong> <span className="capitalize">{evaluationForm.status}</span>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* PAGE 1: Rating Sections */}
+          {currentPage === 1 && (
+            <div className="space-y-8">
+              <div className={`${SUCCESS_BG} border ${ACCENT_BORDER} rounded-xl p-8`}>
+                <h2 className={`text-2xl font-bold ${SUCCESS_TEXT} mb-6`}>
+                  PART I. DIRECTIONS: Please encircle the letter that best evaluates the intern for the period specified above.
+                </h2>
+                <div className={`${SUCCESS_TEXT} mb-6 font-medium`}>Refer to the matrix below for interpretation:</div>
+                
+                {/* Rating Scale Legend */}
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+                  {ratingScale.map(rating => (
+                    <div key={rating?.value} className="text-center p-4 bg-white rounded-xl border-2 border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                      <div className="text-2xl font-bold text-gray-900 mb-1">{rating?.value}</div>
+                      <div className="text-sm font-semibold text-gray-700 mb-1">{rating?.label}</div>
+                      <div className="text-xs text-gray-500">({rating?.range})</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Evaluation Sections */}
+              {Object.entries(evaluationSections).map(([sectionKey, section]) => (
+                <div key={sectionKey} className="bg-gray-50 rounded-xl border border-gray-200 p-8 shadow-sm">
+                  <h3 className="text-xl font-bold text-gray-900 mb-8 pb-4 border-b border-gray-300">{section?.title}</h3>
+                  
+                  <div className="space-y-6">
+                    {(section?.items || []).map((item, index) => (
+                      <div key={item?.id} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 pr-6">
+                            <label className="text-base font-medium text-gray-900 cursor-pointer">
+                              <span className={ACCENT_COLOR}>{String.fromCharCode(97 + index)}.</span> {item?.text}
+                            </label>
+                          </div>
+                          
+                          {/* Rating Buttons */}
+                          <div className="flex space-x-4">
+                            {ratingScale.map(rating => (
+                              <label key={rating?.value} className="cursor-pointer group">
+                                <input
+                                  type="radio"
+                                  name={`${sectionKey}_${item?.id}`}
+                                  value={rating?.value}
+                                  checked={(evaluationForm[sectionKey] || {})[item?.id] === rating?.value}
+                                  onChange={() => handleRatingChange && handleRatingChange(sectionKey, item?.id, rating?.value)}
+                                  disabled={evaluationSubmitting || (!isEditMode && editingEvaluation)}
+                                  className="sr-only"
+                                />
+                                <div className={`w-12 h-12 rounded-full border-3 font-bold flex items-center justify-center text-base transition-all transform group-hover:scale-105 ${
+                                  (evaluationForm[sectionKey] || {})[item?.id] === rating?.value
+                                    ? `border-[#0094FF] ${SUCCESS_BG} ${ACCENT_COLOR} scale-110 shadow-lg ring-2 ring-[#BDE4F7]`
+                                    : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50 text-gray-600 group-hover:shadow-md'
+                                } ${evaluationSubmitting || (!isEditMode && editingEvaluation) ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                  {rating?.value}
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* --- UPDATED SECTION SCORE DISPLAY (1-5 Scale) --- */}
+                  <div className={`mt-8 p-6 bg-white rounded-xl border-l-4 border-[#0094FF] shadow-sm`}>
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="text-lg font-semibold text-gray-700">Section Average:</span>
+                      <span className={`text-2xl font-bold ${ACCENT_COLOR}`}>
+                        {/* Display raw average (e.g., 4.25) / 5.00 */}
+                        {Number(safeCalculateSectionScore(evaluationForm[sectionKey])).toFixed(2)} / 5.00
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                      {/* Calculate Width based on scale of 5. e.g. Score 4 = 80% */}
+                      <div 
+                        className={`bg-gradient-to-r from-[#0094FF] to-[#42A5FF] h-4 rounded-full transition-all duration-700 ease-out`} 
+                        style={{ width: `${(safeCalculateSectionScore(evaluationForm[sectionKey]) / 5) * 100}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2 text-right">
+                       * Calculated as average of all items in this section.
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* PAGE 2: Essay Questions and Summary */}
+          {currentPage === 2 && (
+            <div className="space-y-8">
+              
+              {/* --- ADDED CRITERIA REFERENCE PANEL HERE --- */}
+              {CriteriaReferencePanel && (
+                 <div className="mb-6">
+                    <CriteriaReferencePanel />
+                 </div>
+              )}
+
+              {/* PART II: Essay Questions */}
+              <div className="bg-gray-50 rounded-xl border border-gray-200 p-8 shadow-sm">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6 pb-4 border-b border-gray-300">
+                  PART II. DIRECTIONS: Please answer the questions below.
+                </h2>
+
+                <div className="space-y-8">
+                  {essayQuestions.map((question) => (
+                    <div key={question?.id} className="bg-white rounded-xl border border-gray-200 p-8 shadow-sm">
+                      <label className="block text-lg font-semibold text-gray-900 mb-4">
+                        {question?.question}
+                      </label>
+                      <textarea
+                        value={(evaluationForm.essayQuestions || {})[question?.id] || ""}
+                        onChange={(e) => handleEssayChange && handleEssayChange(question?.id, e.target.value)}
+                        placeholder={question?.placeholder}
+                        rows={8}
+                        disabled={evaluationSubmitting || (!isEditMode && editingEvaluation)}
+                        className={`w-full px-4 py-4 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0094FF] focus:border-[#0094FF] resize-vertical transition-colors text-gray-800 leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Signature Section */}
+              <div className="bg-gray-50 rounded-xl border border-gray-200 p-8 shadow-sm">
+                <h3 className="text-xl font-bold text-gray-900 mb-8 pb-4 border-b border-gray-300">
+                  NAME & SIGNATURE OF SITE SUPERVISOR
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">
+                      Name of Site Supervisor:
+                    </label>
+                    <input
+                      type="text"
+                      value={evaluationForm.supervisorName || user?.name || user?.displayName || ""}
+                      onChange={(e) => handleFormChange('supervisorName', e.target.value)}
+                      className={`w-full px-4 py-4 bg-white border-b-4 border-gray-400 focus:border-[#0094FF] outline-none text-gray-900 font-semibold text-lg transition-colors`}
+                      placeholder="Enter supervisor name"
+                      disabled={evaluationSubmitting || (!isEditMode && editingEvaluation)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">
+                      Date:
+                    </label>
+                    <input
+                      type="date"
+                      value={evaluationForm.evaluationDate || ''}
+                      onChange={(e) => handleFormChange('evaluationDate', e.target.value)}
+                      className={`w-full px-4 py-4 bg-white border-b-4 border-gray-400 focus:border-[#0094FF] outline-none text-gray-900 font-semibold text-lg transition-colors`}
+                      disabled={evaluationSubmitting || (!isEditMode && editingEvaluation)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* --- UPDATED Overall Score Summary for 1-5 Scale --- */}
+              <div className={`bg-gradient-to-r from-[#BDE4F7] to-[#42A5FF] border ${ACCENT_BORDER} rounded-xl p-8 shadow-lg`}>
+                <h3 className={`text-xl font-bold ${SUCCESS_TEXT} mb-8 text-center`}>EVALUATION SUMMARY</h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-center">
+                  <div className="bg-white rounded-xl p-8 shadow-md border border-gray-200">
+                    <div className={`flex justify-center ${ACCENT_COLOR} mb-3`}>
+                        <HiOutlineChartPie className="w-10 h-10" />
+                    </div>
+                    {/* Display Raw Score / 5 */}
+                    <div className={`text-4xl font-bold ${ACCENT_COLOR} mb-3`}>
+                        {safeCalculateOverallScore().toFixed(2)} <span className="text-lg text-gray-400">/ 5</span>
+                    </div>
+                    <div className="text-base text-gray-600 mb-2 font-medium">Overall Average</div>
+                    
+                    {/* Updated Text Labels for 1-5 Scale */}
+                    <div className="text-sm text-gray-500 font-bold">
+                      {(() => {
+                        const score = safeCalculateOverallScore();
+                        if (score >= 4.5) return 'Outstanding (O)';
+                        if (score >= 4.0) return 'Excellent (E)';
+                        if (score >= 3.0) return 'Above Standard (A)';
+                        if (score >= 2.0) return 'Standard (S)';
+                        if (score >= 1.5) return 'Needs Improvement (N)';
+                        return 'Poor (P)';
+                      })()}
+                    </div>
+                  </div>
+                  
+                  <div className="bg-white rounded-xl p-8 shadow-md border border-gray-200">
+                    <div className={`flex justify-center ${SUCCESS_TEXT} mb-3`}>
+                        <HiOutlineCheck className="w-10 h-10" />
+                    </div>
+                    <div className={`text-5xl font-bold ${SUCCESS_TEXT} mb-3`}>
+                      {Object.values(evaluationForm.behaviorAtWork || {}).filter(r => r).length + 
+                       Object.values(evaluationForm.academicPerformance || {}).filter(r => r).length +
+                       Object.values(evaluationForm.socialBehavior || {}).filter(r => r).length +
+                       Object.values(evaluationForm.personality || {}).filter(r => r).length +
+                       Object.values(evaluationForm.costConsciousness || {}).filter(r => r).length}
+                    </div>
+                    <div className="text-base text-gray-600 mb-2 font-medium">Items Rated</div>
+                    <div className="text-sm text-gray-500">out of 33 total</div>
+                  </div>
+                  
+                  <div className="bg-white rounded-xl p-8 shadow-md border border-gray-200">
+                    <div className={`flex justify-center ${ACCENT_COLOR} mb-3`}>
+                        <HiOutlinePencil className="w-10 h-10" />
+                    </div>
+                    <div className={`text-5xl font-bold ${ACCENT_COLOR} mb-3`}>
+                      {Object.values(evaluationForm.essayQuestions || {}).filter(q => q?.trim()).length}
+                    </div>
+                    <div className="text-base text-gray-600 mb-2 font-medium">Questions Answered</div>
+                    <div className="text-sm text-gray-500">out of 4 total</div>
+                  </div>
+                  
+                  <div className="bg-white rounded-xl p-8 shadow-md border border-gray-200">
+                    <div className={`flex justify-center ${DRAFT_TEXT} mb-3`}>
+                        <HiOutlineCheckCircle className="w-10 h-10" />
+                    </div>
+                    <div className={`text-5xl font-bold ${DRAFT_TEXT} mb-3`}>
+                      {Math.round(((Object.values(evaluationForm.behaviorAtWork || {}).filter(r => r).length + 
+                                   Object.values(evaluationForm.academicPerformance || {}).filter(r => r).length +
+                                   Object.values(evaluationForm.socialBehavior || {}).filter(r => r).length +
+                                   Object.values(evaluationForm.personality || {}).filter(r => r).length +
+                                   Object.values(evaluationForm.costConsciousness || {}).filter(r => r).length +
+                                   Object.values(evaluationForm.essayQuestions || {}).filter(q => q?.trim()).length) / 37) * 100)}%
+                    </div>
+                    <div className="text-base text-gray-600 mb-2 font-medium">Completion</div>
+                    <div className="text-sm text-gray-500">overall progress</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Navigation Footer */}
+          <div className="flex justify-between items-center pt-8 border-t border-gray-200">
+            <div className="flex space-x-4">
+              <button
+                onClick={goToPreviousPage}
+                disabled={currentPage === 1 || evaluationSubmitting}
+                className={`px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                  currentPage === 1 ? 'invisible' : 'hover:bg-gray-50 hover:border-gray-400'
+                }`}
+              >
+                ← Back
+              </button>
+            </div>
+
+            <div className="text-center">
+              <div className="text-sm text-gray-500 mb-2">Step {currentPage} of 2</div>
+              <div className="w-64 bg-gray-200 rounded-full h-2">
+                <div 
+                  className={`${ACCENT_COLOR} h-2 rounded-full transition-all duration-300`} 
+                  style={{ width: `${(currentPage / 2) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+
+            <div className="flex space-x-4">
+              {currentPage === 1 && (
+                <button
+                  onClick={goToNextPage}
+                  disabled={evaluationSubmitting}
+                  className={`${PRIMARY_ACTION_BG} text-white px-8 py-4 rounded-xl ${PRIMARY_ACTION_HOVER_BG} transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  Next →
+                </button>
+              )}
+
+              {currentPage === 2 && (isEditMode || !editingEvaluation) && (
+                <>
+                  <button 
+                    onClick={() => handleSaveEvaluation && handleSaveEvaluation("draft")}
+                    disabled={evaluationSubmitting}
+                    className="px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <HiOutlinePencilSquare className="w-5 h-5 mr-2 inline" />
+                    {evaluationSubmitting ? "Saving..." : (isEditMode ? "Update Draft" : "Save as Draft")}
+                  </button>
+                  <button 
+                    onClick={() => handleSaveEvaluation && handleSaveEvaluation("submitted")}
+                    disabled={evaluationSubmitting}
+                    className={`px-8 py-4 bg-gradient-to-r from-[#0094FF] to-[#002B66] text-white rounded-xl hover:from-[#002B66] hover:to-[#002B66] transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-105`}
+                  >
+                    <HiOutlineCheck className="w-5 h-5 mr-2 inline" />
+                    {evaluationSubmitting ? "Submitting..." : "Submit Evaluation"}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default TabSection;

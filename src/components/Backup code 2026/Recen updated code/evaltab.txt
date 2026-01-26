@@ -1,0 +1,595 @@
+// fileName: EvaluationTab.jsx
+
+import React, { useState, useEffect } from "react";
+import {
+  collection,
+  query,
+  where,
+  addDoc,
+  updateDoc,
+  doc,
+  serverTimestamp,
+  onSnapshot,
+  orderBy
+} from "firebase/firestore";
+import { db } from "../../../firebaseConfig";
+import toast, { Toaster } from "react-hot-toast";
+import TabSection from "../../components/TabSection";
+import jsPDF from "jspdf";
+import html2canvas from 'html2canvas-pro';
+import { HiOutlineChartPie, HiOutlinePencil } from "react-icons/hi2";
+
+// --- CONSTANTS ---
+
+const ratingScale = [
+  { value: "E", label: "Excellent", range: "5", score: 5, calculationValue: 5, color: "green" },
+  { value: "A", label: "Above Standard", range: "4", score: 4, calculationValue: 4, color: "blue" },
+  { value: "S", label: "Standard", range: "3", score: 3, calculationValue: 3, color: "yellow" },
+  { value: "N", label: "Needs Improvement", range: "2", score: 2, calculationValue: 2, color: "orange" },
+  { value: "P", label: "Poor", range: "1", score: 1, calculationValue: 1, color: "red" }
+];
+
+const STANDARD_TEMPLATE = {
+  sections: [
+    {
+      id: "sec_behavior",
+      title: "I. BEHAVIOR AT WORK",
+      items: [
+        { id: "q_att", text: "Attention and concentration on tasks" },
+        { id: "q_mot", text: "Motivation and initiative" },
+        { id: "q_rel", text: "Relationship with others" },
+        { id: "q_attd", text: "Attendance" }
+      ]
+    },
+    {
+      id: "sec_academic",
+      title: "II. ACADEMIC PERFORMANCE",
+      items: [
+        { id: "q_know", text: "Knowledge of assigned tasks" },
+        { id: "q_learn", text: "Ability to learn" }
+      ]
+    }
+  ],
+  essays: [
+    {
+      id: "essay_str",
+      question: "What are the intern's strengths?",
+      placeholder: "List strengths..."
+    },
+    {
+      id: "essay_imp",
+      question: "Areas for improvement?",
+      placeholder: "List areas..."
+    }
+  ]
+};
+
+// --- HELPER FUNCTIONS ---
+
+const getSafeName = (intern) => {
+  if (!intern) return "Unknown Intern";
+  if (intern.firstName && intern.lastName) {
+    return `${intern.firstName} ${intern.lastName}`;
+  }
+  return intern.fullName || intern.name || intern.displayName || "Unknown Intern";
+};
+
+const getPerformanceRating = (score) => {
+  if (score >= 4.5) return { label: "Outstanding", color: "#002B66" };
+  if (score >= 4.0) return { label: "Excellent", color: "#0094FF" };
+  if (score >= 3.0) return { label: "Above Standard", color: "#42A5FF" };
+  if (score >= 2.0) return { label: "Standard", color: "#CA8A04" };
+  return { label: "Poor", color: "#DC2626" };
+};
+
+const calculateOverallScore = (formData, templateSections) => {
+  let totalScore = 0;
+  let totalCount = 0;
+
+  templateSections.forEach((section) => {
+    const sectionRatings = formData[section.id] || {};
+    Object.values(sectionRatings).forEach((val) => {
+      const match = ratingScale.find((r) => r.value === val);
+      if (match) {
+        totalScore += match.calculationValue;
+        totalCount++;
+      }
+    });
+  });
+
+  return totalCount === 0 ? 0 : Number((totalScore / totalCount).toFixed(2));
+};
+
+const calculateSectionScore = (sectionData) => {
+  if (!sectionData) return 0;
+  const ratings = Object.values(sectionData).filter((r) => r);
+  if (ratings.length === 0) return 0;
+  const total = ratings.reduce(
+    (sum, r) => sum + (ratingScale.find((s) => s.value === r)?.calculationValue || 0),
+    0
+  );
+  return Number((total / ratings.length).toFixed(2));
+};
+
+// --- MAIN COMPONENT ---
+
+const EvaluationTab = ({ user }) => {
+  const [activeView, setActiveView] = useState("dashboard");
+  const [myInterns, setMyInterns] = useState([]);
+  const [evaluations, setEvaluations] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [evaluationSubmitting, setEvaluationSubmitting] = useState(false);
+  const [editingEvaluation, setEditingEvaluation] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [formTemplate, setFormTemplate] = useState({
+    title: "OJT Evaluation",
+    sections: [],
+    essays: []
+  });
+
+  const initialFormState = {
+    internId: "",
+    internName: "",
+    periodCovered: "",
+    periodStartMonth: "",
+    periodEndMonth: "",
+    status: "draft",
+    essayQuestions: {},
+    supervisorName: user?.name || "",
+    evaluationDate: ""
+  };
+
+  const [evaluationForm, setEvaluationForm] = useState(initialFormState);
+
+  // --- HANDLERS ---
+
+  const addSection = () => {
+    setFormTemplate((prev) => ({
+      ...prev,
+      sections: [
+        ...prev.sections,
+        { id: `sec_${Date.now()}`, title: "New Section Title", items: [] }
+      ]
+    }));
+  };
+
+  const removeSection = (id) => {
+    if (confirm("Remove this section?")) {
+      setFormTemplate((prev) => ({
+        ...prev,
+        sections: prev.sections.filter((s) => s.id !== id)
+      }));
+    }
+  };
+
+  const updateSectionTitle = (id, newTitle) => {
+    setFormTemplate((prev) => ({
+      ...prev,
+      sections: prev.sections.map((s) => (s.id === id ? { ...s, title: newTitle } : s))
+    }));
+  };
+
+  const addQuestion = (sectionId) => {
+    setFormTemplate((prev) => ({
+      ...prev,
+      sections: prev.sections.map((s) =>
+        s.id === sectionId
+          ? {
+              ...s,
+              items: [
+                ...s.items,
+                { id: `q_${Date.now()}`, text: "New Criteria Question" }
+              ]
+            }
+          : s
+      )
+    }));
+  };
+
+  const removeQuestion = (sectionId, qId) => {
+    setFormTemplate((prev) => ({
+      ...prev,
+      sections: prev.sections.map((s) =>
+        s.id === sectionId
+          ? {
+              ...s,
+              items: s.items.filter((i) => i.id !== qId)
+            }
+          : s
+      )
+    }));
+  };
+
+  const updateQuestionText = (sectionId, qId, text) => {
+    setFormTemplate((prev) => ({
+      ...prev,
+      sections: prev.sections.map((s) =>
+        s.id === sectionId
+          ? {
+              ...s,
+              items: s.items.map((i) => (i.id === qId ? { ...i, text } : i))
+            }
+          : s
+      )
+    }));
+  };
+
+  const addEssay = () => {
+    setFormTemplate((prev) => ({
+      ...prev,
+      essays: [
+        ...prev.essays,
+        {
+          id: `essay_${Date.now()}`,
+          question: "New Essay Question",
+          placeholder: "Enter answer..."
+        }
+      ]
+    }));
+  };
+
+  const removeEssay = (id) => {
+    setFormTemplate((prev) => ({
+      ...prev,
+      essays: prev.essays.filter((e) => e.id !== id)
+    }));
+  };
+
+  const updateEssayText = (id, text) => {
+    setFormTemplate((prev) => ({
+      ...prev,
+      essays: prev.essays.map((e) =>
+        e.id === id ? { ...e, question: text } : e
+      )
+    }));
+  };
+
+  const loadStandardTemplate = () => {
+    if (formTemplate.sections.length > 0 &&
+      !confirm("This will overwrite your current template. Continue?")
+    )
+      return;
+
+    setFormTemplate({
+      title: "Standard OJT Evaluation",
+      sections: JSON.parse(JSON.stringify(STANDARD_TEMPLATE.sections)),
+      essays: JSON.parse(JSON.stringify(STANDARD_TEMPLATE.essays))
+    });
+    toast.success("Standard template loaded");
+  };
+
+  const handleRatingChange = (sectionId, itemId, rating) => {
+    // SECURITY: Prevent changes if view only
+    if (!isEditMode && editingEvaluation) return;
+    setEvaluationForm((prev) => ({
+      ...prev,
+      [sectionId]: { ...(prev[sectionId] || {}), [itemId]: rating }
+    }));
+  };
+
+  const handleEssayAnswerChange = (qId, val) => {
+    if (!isEditMode && editingEvaluation) return;
+    setEvaluationForm((prev) => ({
+      ...prev,
+      essayQuestions: { ...(prev.essayQuestions || {}), [qId]: val }
+    }));
+  };
+
+  const handleSaveEvaluation = async (status) => {
+    if (!evaluationForm.internId && !isEditMode)
+      return toast.error("Please select an intern first");
+
+    // Strict Validation
+    if (status === "submitted") {
+      if (formTemplate.sections.length === 0) {
+        return toast.error(
+          "You cannot submit an empty evaluation. Please add sections."
+        );
+      }
+
+      if (
+        !evaluationForm.periodCovered ||
+        !evaluationForm.periodStartMonth ||
+        !evaluationForm.periodEndMonth
+      ) {
+        return toast.error(
+          "Please complete the Evaluation Period details."
+        );
+      }
+
+      if (!evaluationForm.supervisorName) {
+        return toast.error(
+          "Please enter the Supervisor Name/Signature."
+        );
+      }
+
+      for (const section of formTemplate.sections) {
+        const sectionData = evaluationForm[section.id] || {};
+        for (const item of section.items) {
+          if (!sectionData[item.id]) {
+            return toast.error(
+              `Missing rating in "${section.title}" for item: "${item.text}"`
+            );
+          }
+        }
+      }
+
+      for (const essay of formTemplate.essays) {
+        const answer = (evaluationForm.essayQuestions || {})[essay.id];
+        if (!answer || !answer.trim()) {
+          return toast.error(
+            `Please answer the essay question: "${essay.question}"`
+          );
+        }
+      }
+    }
+
+    setEvaluationSubmitting(true);
+    try {
+      const overallScore = calculateOverallScore(
+        evaluationForm,
+        formTemplate.sections
+      );
+
+      const dataToSave = {
+        ...evaluationForm,
+        status,
+        overallScore,
+        savedTemplateSnapshot: formTemplate,
+        createdAt: serverTimestamp(),
+        supervisorId: user.uid
+      };
+
+      if (isEditMode && editingEvaluation) {
+        // Prevent re-saving if it was already completed (Security check)
+        if (
+          editingEvaluation.status === "submitted" &&
+          status === "draft"
+        ) {
+          throw new Error("Cannot revert a submitted evaluation to draft.");
+        }
+
+        delete dataToSave.createdAt;
+        await updateDoc(
+          doc(db, "evaluations", editingEvaluation.id),
+          dataToSave
+        );
+      } else {
+        await addDoc(collection(db, "evaluations"), dataToSave);
+      }
+
+      toast.success(
+        status === "draft"
+          ? "Draft Saved!"
+          : "Evaluation Submitted Successfully!"
+      );
+      setActiveView("dashboard");
+      setEvaluationForm(initialFormState);
+      setEditingEvaluation(null);
+      setIsEditMode(false);
+    } catch (e) {
+      console.error(e);
+      toast.error("Save failed. Please try again.");
+    } finally {
+      setEvaluationSubmitting(false);
+    }
+  };
+
+  // --- FIXED PDF HANDLER (Forces white background to solve oklch error) ---
+
+  const handlePDF = (elementId, filename) => {
+    setTimeout(() => {
+      const input = document.getElementById(elementId);
+      if (!input) {
+        toast.error("Report not found. Please try again.");
+        console.warn("Element not found with id:", elementId);
+        return;
+      }
+
+      toast.loading("Generating PDF...", { id: "pdf-toast" });
+
+      html2canvas(input, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        onclone: (clonedDoc) => {
+          const el = clonedDoc.getElementById(elementId);
+          if (el) {
+            el.style.backgroundColor = "#ffffff";
+            el.style.color = "#000000";
+          }
+        }
+      })
+        .then((canvas) => {
+          const imgData = canvas.toDataURL("image/png");
+          const pdf = new jsPDF("p", "mm", "a4");
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+          pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+          pdf.save(`${filename || "evaluation"}.pdf`);
+          toast.dismiss("pdf-toast");
+          toast.success("PDF Downloaded!");
+        })
+        .catch((err) => {
+          console.error("PDF Export Error:", err);
+          toast.dismiss("pdf-toast");
+          toast.error(
+            "Export failed. Browser does not support this color format."
+          );
+        });
+    }, 500);
+  };
+
+  // --- DATA LOADING ---
+
+  useEffect(() => {
+    if (!user || user.role !== "supervisor") return;
+
+    const q = query(
+      collection(db, "users"),
+      where("role", "==", "intern")
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      const interns = [];
+      snap.forEach((d) => interns.push({ uid: d.id, ...d.data() }));
+      setMyInterns(interns.filter((i) => i.supervisorId === user.uid));
+    });
+
+    return () => unsub();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const ref = collection(db, "evaluations");
+    const q =
+      user.role === "supervisor"
+        ? query(
+            ref,
+            where("supervisorId", "==", user.uid),
+            orderBy("createdAt", "desc")
+          )
+        : query(
+            ref,
+            where("internId", "==", user.uid),
+            where("status", "in", ["completed", "submitted"]),
+            orderBy("createdAt", "desc")
+          );
+
+    const unsub = onSnapshot(q, (snap) => {
+      const evals = [];
+      snap.forEach((d) => evals.push({ id: d.id, ...d.data() }));
+      setEvaluations(evals);
+    });
+
+    return () => unsub();
+  }, [user]);
+
+  // --- UI HANDLERS ---
+
+  const handleEditEvaluation = (ev) => {
+    // If evaluation is submitted, force VIEW mode, do not allow Edit
+    if (ev.status === "submitted" || ev.status === "completed") {
+      handleViewEvaluation(ev);
+      return;
+    }
+
+    setEvaluationForm({ ...initialFormState, ...ev });
+    if (ev.savedTemplateSnapshot) setFormTemplate(ev.savedTemplateSnapshot);
+    setEditingEvaluation(ev);
+    setIsEditMode(true);
+    setActiveView("form");
+  };
+
+  const handleViewEvaluation = (ev) => {
+    setEvaluationForm({ ...initialFormState, ...ev });
+    if (ev.savedTemplateSnapshot) setFormTemplate(ev.savedTemplateSnapshot);
+    setEditingEvaluation(ev);
+    setIsEditMode(false);
+    setActiveView("form");
+  };
+
+  const resetForm = () => {
+    setEvaluationForm(initialFormState);
+    setEditingEvaluation(null);
+    setIsEditMode(false);
+    setFormTemplate({ title: "OJT Evaluation", sections: [], essays: [] });
+  };
+
+  const dataProps = {
+    evaluations,
+    myInterns,
+    evaluationForm,
+    loading,
+    evaluationSubmitting,
+    editingEvaluation,
+    isEditMode,
+    ratingScale,
+    formTemplate,
+    calculateSectionScore,
+    calculateOverallScore,
+    getPerformanceRating
+  };
+
+  const handlerProps = {
+    setActiveView,
+    handleEditEvaluation,
+    handleViewEvaluation,
+    resetForm,
+    handleSaveEvaluation,
+    handleRatingChange,
+    handleEssayAnswerChange,
+    handlePDF,
+    handleInternSelection: (uid) => {
+      const i = myInterns.find((k) => k.uid === uid);
+      if (i) {
+        setEvaluationForm((p) => ({
+          ...p,
+          internId: uid,
+          internName: getSafeName(i)
+        }));
+      }
+    },
+    handleFormChange: (f, v) =>
+      setEvaluationForm((p) => ({ ...p, [f]: v })),
+    addSection,
+    removeSection,
+    updateSectionTitle,
+    addQuestion,
+    removeQuestion,
+    updateQuestionText,
+    addEssay,
+    removeEssay,
+    updateEssayText,
+    loadStandardTemplate
+  };
+
+  return (
+    <>
+      <Toaster position="top-right" />
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <h1 className="text-3xl font-bold text-gray-900 mb-6">Evaluations</h1>
+
+        <nav className="flex space-x-1 bg-white rounded-lg p-1 shadow-sm border border-gray-200 max-w-fit mb-6">
+          <button
+            onClick={() => setActiveView("dashboard")}
+            className={`flex items-center space-x-2 px-4 py-2 rounded ${
+              activeView === "dashboard"
+                ? "bg-[#0094FF] text-white"
+                : "text-gray-600"
+            }`}
+          >
+            <HiOutlineChartPie />
+            <span>Dashboard</span>
+          </button>
+          <button
+            onClick={() => {
+              resetForm();
+              setActiveView("form");
+            }}
+            className={`flex items-center space-x-2 px-4 py-2 rounded ${
+              activeView === "form"
+                ? "bg-[#0094FF] text-white"
+                : "text-gray-600"
+            }`}
+          >
+            <HiOutlinePencil />
+            <span>Evaluation Form</span>
+          </button>
+        </nav>
+
+        <TabSection
+          currentTab={activeView}
+          data={dataProps}
+          user={user}
+          handlers={handlerProps}
+        />
+      </div>
+    </>
+  );
+};
+
+export default EvaluationTab;
