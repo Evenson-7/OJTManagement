@@ -109,6 +109,12 @@ const SupervisorHeaderIcon = () => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
   </svg>
 );
+// --- NEW ICON FOR DOWNLOAD ---
+const MobileIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+  </svg>
+);
 // --- ( END ICONS ) ---
 
 // --- ( REUSABLE COMPONENTS ) ---
@@ -727,6 +733,32 @@ const Auth = () => {
                 </button>
               </div>
             </div>
+
+            {/* --- NEW DOWNLOAD APP SECTION --- */}
+            <div className="mt-8 pt-6 border-t border-gray-100/60 flex flex-col items-center">
+              <a
+                // ⚠️ REPLACE THE URL BELOW WITH YOUR ACTUAL GITHUB LINK
+                href="https://github.com/Evenson-7/OJTManagement/releases/download/v1-0/OJTManagement.apk" 
+                className="group flex items-center space-x-3 px-5 py-2.5 rounded-xl bg-gradient-to-br from-white to-gray-50 border border-gray-200 shadow-sm hover:shadow-md hover:border-[#42A5FF]/40 transition-all duration-300"
+              >
+                <div className={`p-2 rounded-lg bg-blue-50 text-[#0094FF] group-hover:scale-110 transition-transform duration-300`}>
+                  <MobileIcon />
+                </div>
+                <div className="flex flex-col text-left">
+                  <span className="text-xs font-bold text-gray-700 group-hover:text-[#0094FF] transition-colors">
+                    Get the Mobile App
+                  </span>
+                  <span className="text-[10px] text-gray-500 font-medium">
+                    Download Preview .apk
+                  </span>
+                </div>
+              </a>
+              {/* Helper Text for Unknown Sources */}
+              <p className="text-[9px] text-gray-400 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                *Requires installation from unknown sources
+              </p>
+            </div>
+
           </form>
         </div>
       </div>
