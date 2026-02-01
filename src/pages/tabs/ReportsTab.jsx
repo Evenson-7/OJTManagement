@@ -1,46 +1,102 @@
-// fileName: ReportsTab.jsx
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  doc,
+  serverTimestamp,
+  onSnapshot,
+  orderBy,
+  getDoc,
+} from "firebase/firestore";
+import { db } from "../../../firebaseConfig";
+import toast, { Toaster } from "react-hot-toast";
+import {
+  FileText,
+  Plus,
+  Calendar,
+  User,
+  Search,
+  Filter,
+  Send,
+  X,
+  Loader2,
+  Printer,
+  BarChart2,
+  TrendingUp,
+  Users,
+  Download,
+  CheckSquare,
+  Square
+} from "lucide-react";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, getDocs, addDoc, deleteDoc, doc, serverTimestamp, updateDoc, onSnapshot, orderBy } from 'firebase/firestore';
-import { db } from '../../../firebaseConfig';
-import toast, { Toaster } from 'react-hot-toast';
-import { FileText, Plus, Trash2, Calendar, Clock, User, Search, Filter, Send, X, Loader2, Printer, BarChart2, TrendingUp, Users, AlertCircle } from 'lucide-react';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
+// --- PDF Generation Imports ---
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas-pro";
+
+// --- IMPORT NEW COMPONENT ---
+import ReportPrint from "../../components/ReportPrint";
 
 // --- Configuration ---
 const cloudName = "dixpsqyhx";
-const uploadPreset = "Profile"; 
+const uploadPreset = "Profile";
 
 // --- Styling Constants ---
-const ACCENT_TEXT = 'text-[#0094FF]'; 
-const PRIMARY_FOCUS_RING = 'focus:ring-[#0094FF]';
+const ACCENT_TEXT = "text-[#0094FF]";
+const PRIMARY_FOCUS_RING = "focus:ring-[#0094FF]";
 
 // ==========================================
-// UTILITY: Print Official DTR (Web Version)
+// HELPER: LOCAL DATE STRING
 // ==========================================
-const printWebDTR = (internName, startDate, endDate, logs, supervisorName = "_______________________") => {
-    const printWindow = window.open('', '_blank');
+const getLocalDateString = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+// ==========================================
+// UTILITY: Print Official DTR (Browser Dialog)
+// ==========================================
+// ... (Existing code for printWebDTR remains unchanged) ...
+const printWebDTR = (internName, startDate, endDate, logs, supervisorName) => {
+    // ... (Keep existing code unchanged)
+    const printWindow = window.open("", "_blank");
     const dateRange = `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`;
-    const totalHours = logs.reduce((sum, log) => sum + (parseFloat(log.hoursWorked) || 0), 0).toFixed(2);
+    const totalHours = logs
+        .reduce((sum, log) => sum + (parseFloat(log.hoursWorked) || 0), 0)
+        .toFixed(2);
+    
+    const finalSupervisor =
+        supervisorName &&
+        supervisorName !== "undefined undefined" &&
+        supervisorName !== "Unassigned"
+        ? supervisorName
+        : "_______________________";
 
     printWindow.document.write(`
         <html>
             <head>
                 <title>DTR - ${internName}</title>
                 <style>
-                    body { font-family: 'Arial', sans-serif; padding: 20px; color: #000; max-width: 800px; margin: 0 auto; }
+                    @page { size: A4 portrait; margin: 0; } 
+                    body { font-family: 'Arial', sans-serif; padding: 20mm; color: #000; margin: 0; -webkit-print-color-adjust: exact; }
+                    /* ... Keep existing CSS ... */
                     .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
-                    .title { font-size: 18px; font-weight: bold; margin-bottom: 5px; }
+                    .title { font-size: 18px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase; }
                     .sub-title { font-size: 14px; color: #444; }
-                    .meta-info { margin-bottom: 20px; font-size: 14px; display: flex; justify-content: space-between; }
-                    table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 30px; }
-                    th, td { border: 1px solid #000; padding: 6px 4px; text-align: center; }
-                    th { background-color: #f2f2f2; font-weight: bold; }
-                    .status-weekend { background-color: #eee; color: #666; font-style: italic; }
-                    .status-absent { color: red; font-weight: bold; }
-                    .footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 14px; }
-                    .signature-block { text-align: center; width: 45%; }
+                    .meta-info { margin-bottom: 20px; font-size: 12px; display: flex; justify-content: space-between; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
+                    table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px; }
+                    th, td { border: 1px solid #000; padding: 4px; text-align: center; }
+                    th { background-color: #f0f0f0; font-weight: bold; }
+                    .status-weekend { background-color: #f9f9f9; color: #888; font-style: italic; }
+                    .status-absent { color: red; font-weight: bold; background-color: #fff5f5; }
+                    .footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 12px; page-break-inside: avoid; }
+                    .signature-block { text-align: center; width: 40%; }
                     .signature-line { border-top: 1px solid #000; margin-top: 40px; padding-top: 5px; font-weight: bold; }
                 </style>
             </head>
@@ -56,446 +112,759 @@ const printWebDTR = (internName, startDate, endDate, logs, supervisorName = "___
                 <table>
                     <thead>
                         <tr>
-                            <th rowspan="2">Date</th>
+                            <th rowspan="2" style="width: 15%;">Date</th>
                             <th colspan="2">Morning</th>
                             <th colspan="2">Afternoon</th>
-                            <th rowspan="2">Total<br>Hours</th>
-                            <th rowspan="2">Status</th>
+                            <th rowspan="2" style="width: 10%;">Total<br>Hours</th>
+                            <th rowspan="2" style="width: 15%;">Status</th>
                         </tr>
                         <tr><th>IN</th><th>OUT</th><th>IN</th><th>OUT</th></tr>
                     </thead>
                     <tbody>
-                        ${logs.map(log => {
+                        ${logs.map((log) => {
                             const dateObj = new Date(log.date);
                             const day = dateObj.getDate();
-                            const isWeekend = log.status === 'Weekend';
-                            const isAbsent = log.status === 'Absent';
+                            const isWeekend = log.status === "Weekend";
+                            const isAbsent = log.status === "Absent";
                             return `
-                                <tr class="${isWeekend ? 'status-weekend' : ''}">
-                                    <td>${day} <span style="font-size: 10px; color: #666;">(${dateObj.toLocaleDateString('en-US', {weekday: 'short'})})</span></td>
-                                    <td>${log.morningIn || '--'}</td><td>${log.morningOut || '--'}</td>
-                                    <td>${log.afternoonIn || '--'}</td><td>${log.afternoonOut || '--'}</td>
-                                    <td>${log.hoursWorked > 0 ? log.hoursWorked : '--'}</td>
-                                    <td class="${isAbsent ? 'status-absent' : ''}">${log.status}</td>
+                                <tr class="${isWeekend ? "status-weekend" : ""}">
+                                    <td>${day} <span style="font-size: 9px; color: #555;">(${dateObj.toLocaleDateString("en-US", { weekday: "short" })})</span></td>
+                                    <td>${log.morningIn || "--"}</td><td>${log.morningOut || "--"}</td>
+                                    <td>${log.afternoonIn || "--"}</td><td>${log.afternoonOut || "--"}</td>
+                                    <td>${log.hoursWorked > 0 ? log.hoursWorked : "--"}</td>
+                                    <td class="${isAbsent ? "status-absent" : ""}">${log.status}</td>
                                 </tr>
                             `;
-                        }).join('')}
+                          }).join("")}
                     </tbody>
                 </table>
                 <div class="footer">
-                    <div class="signature-block">I certify on my honor that the above is a true and correct report.<div class="signature-line">${internName}</div><div>Intern Signature</div></div>
-                    <div class="signature-block">Certified Correct:<div class="signature-line">${supervisorName}</div><div>Supervisor / Certifier</div></div>
+                    <div class="signature-block">
+                        I certify on my honor that the above is a true and correct report.
+                        <div class="signature-line">${internName}</div>
+                        <div>Intern Signature</div>
+                    </div>
+                    <div class="signature-block">
+                        Certified Correct:
+                        <div class="signature-line">${finalSupervisor}</div>
+                        <div>Supervisor / Certifier</div>
+                    </div>
                 </div>
                 <script>window.onload = function() { window.print(); }</script>
             </body>
         </html>
     `);
-    printWindow.document.close();
+  printWindow.document.close();
 };
 
 const uploadImageToCloudinary = async (file) => {
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("upload_preset", uploadPreset);
-  try {
-    const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: "POST", body: formData });
-    return (await response.json()).secure_url;
-  } catch (error) { console.error(error); return null; }
+    // ... (Keep existing code unchanged)
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", uploadPreset);
+    try {
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+        { method: "POST", body: formData },
+      );
+      return (await response.json()).secure_url;
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
 };
 
 const getCurrentYear = () => new Date().getFullYear();
-const countWords = (text) => text ? text.trim().split(/\s+/).filter(word => word.length > 0).length : 0;
-const formatDate = (timestamp) => {
-    if (!timestamp) return 'Invalid Date';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-};
 
 // =========================================================
-// NEW: SUPERVISOR DASHBOARD (Top Level View)
+// MANAGER DASHBOARD
 // =========================================================
-const SupervisorDashboard = ({ allReports }) => {
-    // Calculate Stats
-    const totalReports = allReports.length;
-    
-    // Group reports by user to find "Active Interns"
-    const internStats = useMemo(() => {
-        const stats = {};
-        allReports.forEach(r => {
-            if (!stats[r.userId]) {
-                stats[r.userId] = { 
-                    name: r.userName, 
-                    count: 0, 
-                    lastSubmit: r.createdAt 
-                };
-            }
-            stats[r.userId].count += 1;
-            // Track most recent submission
-            if (r.createdAt > stats[r.userId].lastSubmit) {
-                stats[r.userId].lastSubmit = r.createdAt;
-            }
-        });
-        return Object.values(stats).sort((a, b) => b.count - a.count); // Sort by most active
-    }, [allReports]);
+const SupervisorDashboard = ({ relevantReports }) => {
+   // ... (Keep existing code unchanged)
+  const totalReports = relevantReports.length;
 
-    const activeInternsCount = internStats.length;
-    const mostActiveIntern = internStats.length > 0 ? internStats[0].name : "N/A";
+  const internStats = useMemo(() => {
+    const stats = {};
+    relevantReports.forEach((r) => {
+      if (!stats[r.userId]) {
+        stats[r.userId] = { name: r.userName, count: 0 };
+      }
+      stats[r.userId].count += 1;
+    });
+    return Object.values(stats).sort((a, b) => b.count - a.count);
+  }, [relevantReports]);
 
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
-            {/* Stat 1: Total Reports */}
-            <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                <div>
-                    <p className="text-sm font-medium text-gray-500 mb-1">Total Reports Submitted</p>
-                    <h3 className="text-3xl font-bold text-gray-900">{totalReports}</h3>
-                </div>
-                <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-600">
-                    <FileText size={24} />
-                </div>
-            </div>
+  const activeInternsCount = internStats.length;
+  const mostActiveInternFull =
+    internStats.length > 0 ? internStats[0].name : "N/A";
+  const mostActiveInternDisplay =
+    mostActiveInternFull !== "N/A" ? mostActiveInternFull.split(" ")[0] : "N/A";
 
-            {/* Stat 2: Active Interns */}
-            <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                <div>
-                    <p className="text-sm font-medium text-gray-500 mb-1">Active Contributing Interns</p>
-                    <h3 className="text-3xl font-bold text-gray-900">{activeInternsCount}</h3>
-                </div>
-                <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center text-green-600">
-                    <Users size={24} />
-                </div>
-            </div>
-
-            {/* Stat 3: Top Contributor */}
-            <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                <div>
-                    <p className="text-sm font-medium text-gray-500 mb-1">Top Contributor</p>
-                    <h3 className="text-xl font-bold text-gray-900 truncate max-w-[150px]" title={mostActiveIntern}>
-                        {mostActiveIntern}
-                    </h3>
-                    <p className="text-xs text-green-600 font-medium mt-1">
-                        {internStats.length > 0 ? `${internStats[0].count} reports` : 'No data'}
-                    </p>
-                </div>
-                <div className="w-12 h-12 bg-purple-50 rounded-full flex items-center justify-center text-purple-600">
-                    <TrendingUp size={24} />
-                </div>
-            </div>
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-500 mb-1">Total Reports</p>
+          <h3 className="text-3xl font-bold text-gray-900">{totalReports}</h3>
         </div>
-    );
+        <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-600">
+          <FileText size={24} />
+        </div>
+      </div>
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-500 mb-1">Active Interns</p>
+          <h3 className="text-3xl font-bold text-gray-900">{activeInternsCount}</h3>
+        </div>
+        <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center text-green-600">
+          <Users size={24} />
+        </div>
+      </div>
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-500 mb-1">Top Contributor</p>
+          <h3 className="text-xl font-bold text-gray-900">{mostActiveInternDisplay}</h3>
+          <p className="text-xs text-green-600 font-medium mt-1">
+            {internStats.length > 0 ? `${internStats[0].count} reports` : "No data"}
+          </p>
+        </div>
+        <div className="w-12 h-12 bg-purple-50 rounded-full flex items-center justify-center text-purple-600">
+          <TrendingUp size={24} />
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // =========================================================
 // SECTION 1: ATTENDANCE DTR GENERATOR
 // =========================================================
-const AttendanceDTRSection = ({ user, interns, isSupervisor }) => {
-    const now = new Date();
-    const [startDate, setStartDate] = useState(new Date(now.getFullYear(), now.getMonth(), 1));
-    const [endDate, setEndDate] = useState(new Date(now.getFullYear(), now.getMonth() + 1, 0));
-    
-    // AUTO-SELECT FIX: If supervisor and interns exist, pick the first one automatically
-    const [selectedInternId, setSelectedInternId] = useState(isSupervisor ? '' : user.uid);
-    
-    useEffect(() => {
-        if (isSupervisor && interns.length > 0 && !selectedInternId) {
-            setSelectedInternId(interns[0].id);
-        }
-    }, [isSupervisor, interns, selectedInternId]);
+const AttendanceDTRSection = ({ user, interns, isManager }) => {
+    // ... (Keep existing code unchanged)
+    // NOTE: This section works fine, keeping logic as is.
+  const now = new Date();
+  const [startDate, setStartDate] = useState(new Date(now.getFullYear(), now.getMonth(), 1));
+  const [endDate, setEndDate] = useState(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  const [selectedInternId, setSelectedInternId] = useState(isManager ? "" : user.uid);
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [tracedSupervisorName, setTracedSupervisorName] = useState("Unassigned");
 
-    const [logs, setLogs] = useState([]);
-    const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (isManager && interns.length > 0 && !selectedInternId) {
+      setSelectedInternId(interns[0].id);
+    }
+  }, [isManager, interns, selectedInternId]);
 
-    const generateReport = async () => {
-        if (!selectedInternId) {
-            toast.error("Please select an intern.");
-            return;
-        }
-        setLoading(true);
+  useEffect(() => {
+    const traceSupervisor = async () => {
+      setTracedSupervisorName("Loading...");
+      if (user.role === "supervisor") {
+        const myName = user.firstName ? `${user.firstName} ${user.lastName}` : user.name || "Unassigned";
+        setTracedSupervisorName(myName);
+        return;
+      }
+      if (selectedInternId) {
         try {
-            // Using 'internId' to match your mobile app structure
-            const q = query(collection(db, 'attendance'), where('internId', '==', selectedInternId), orderBy('date', 'asc'));
-            const snapshot = await getDocs(q);
-            const rawLogs = snapshot.docs.map(doc => doc.data());
-
-            const filteredLogs = [];
-            for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-                const dateISO = d.toISOString().slice(0, 10);
-                const log = rawLogs.find(r => r.date === dateISO);
-                if (log) {
-                    filteredLogs.push({
-                        date: dateISO,
-                        morningIn: log.morningIn, morningOut: log.morningOut,
-                        afternoonIn: log.afternoonIn, afternoonOut: log.afternoonOut,
-                        hoursWorked: log.hoursWorked || 0, status: log.status || 'Present'
-                    });
-                } else {
-                    const day = d.getDay();
-                    const isWeekend = (day === 0 || day === 6);
-                    filteredLogs.push({
-                        date: dateISO,
-                        morningIn: null, morningOut: null, afternoonIn: null, afternoonOut: null,
-                        hoursWorked: 0, status: isWeekend ? 'Weekend' : 'Absent'
-                    });
-                }
+          const internRef = doc(db, "users", selectedInternId);
+          const internSnap = await getDoc(internRef);
+          if (internSnap.exists()) {
+            const internData = internSnap.data();
+            if (internData.supervisorName && internData.supervisorName !== "Unassigned") {
+               setTracedSupervisorName(internData.supervisorName);
+               return; 
             }
-            setLogs(filteredLogs);
-            if(filteredLogs.length > 0) toast.success("Records loaded!");
+            if (internData.supervisorId) {
+              const supRef = doc(db, "users", internData.supervisorId);
+              const supSnap = await getDoc(supRef);
+              if (supSnap.exists()) {
+                 const sData = supSnap.data();
+                 const fullName = sData.firstName ? `${sData.firstName} ${sData.lastName}` : sData.name;
+                 setTracedSupervisorName(fullName || "Unassigned");
+              } else {
+                 setTracedSupervisorName("Supervisor ID Found but Account Deleted");
+              }
+            } else {
+              setTracedSupervisorName("No Assigned Supervisor");
+            }
+          } else {
+            setTracedSupervisorName("Intern Not Found");
+          }
         } catch (error) {
-            console.error("Error fetching DTR:", error);
-            toast.error("Failed to load attendance.");
-        } finally { setLoading(false); }
-    };
-
-    return (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                <div>
-                    <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                        <BarChart2 className={ACCENT_TEXT} /> 
-                        Generate Attendance DTR
-                    </h3>
-                    <p className="text-sm text-gray-500">Official time record for filing.</p>
-                </div>
-                {logs.length > 0 && (
-                     <button onClick={() => {
-                        const iName = isSupervisor ? interns.find(i => i.id === selectedInternId)?.name || "Intern" : user.firstName + " " + user.lastName;
-                        const sName = isSupervisor ? user.firstName + " " + user.lastName : "_______________________";
-                        printWebDTR(iName, startDate, endDate, logs, sName);
-                     }} className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-black flex items-center gap-2 shadow-sm">
-                        <Printer size={18} /> Print DTR
-                    </button>
-                )}
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                {isSupervisor && (
-                    <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Select Intern</label>
-                        <select className="w-full p-2 border border-gray-300 rounded-md text-sm" value={selectedInternId} onChange={(e) => setSelectedInternId(e.target.value)}>
-                            {interns.length === 0 && <option value="">Loading interns...</option>}
-                            {interns.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                        </select>
-                    </div>
-                )}
-                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Start</label><DatePicker selected={startDate} onChange={date => setStartDate(date)} className="w-full p-2 border border-gray-300 rounded-md text-sm" /></div>
-                <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">End</label><DatePicker selected={endDate} onChange={date => setEndDate(date)} className="w-full p-2 border border-gray-300 rounded-md text-sm" /></div>
-                <div className="flex items-end">
-                    <button onClick={generateReport} disabled={loading} className="w-full py-2 bg-[#0094FF] text-white rounded-md hover:bg-blue-600 text-sm font-medium flex items-center justify-center gap-2">
-                        {loading ? <Loader2 className="animate-spin" size={16}/> : <Filter size={16}/>} Generate
-                    </button>
-                </div>
-            </div>
-
-            {/* Preview Table */}
-            {logs.length > 0 ? (
-                <div className="overflow-x-auto border rounded-lg max-h-[400px]">
-                    <table className="w-full text-sm text-left relative">
-                        <thead className="text-xs text-gray-500 uppercase bg-gray-100 border-b sticky top-0 z-10">
-                            <tr>
-                                <th rowSpan="2" className="px-4 py-3 border-r">Date</th>
-                                <th colSpan="2" className="px-4 py-1 text-center border-r border-b">Morning</th>
-                                <th colSpan="2" className="px-4 py-1 text-center border-r border-b">Afternoon</th>
-                                <th rowSpan="2" className="px-4 py-3 border-r text-center">Hrs</th>
-                                <th rowSpan="2" className="px-4 py-3">Status</th>
-                            </tr>
-                            <tr>
-                                <th className="px-2 py-1 text-center border-r text-xs">IN</th><th className="px-2 py-1 text-center border-r text-xs">OUT</th>
-                                <th className="px-2 py-1 text-center border-r text-xs">IN</th><th className="px-2 py-1 text-center border-r text-xs">OUT</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 bg-white">
-                            {logs.map((log, index) => (
-                                <tr key={index} className={`hover:bg-gray-50 ${log.status === 'Weekend' ? 'bg-gray-50 text-gray-400 italic' : log.status === 'Absent' ? 'bg-red-50' : ''}`}>
-                                    <td className="px-4 py-2 border-r font-medium">{log.date}</td>
-                                    <td className="px-2 py-2 text-center border-r">{log.morningIn || '-'}</td><td className="px-2 py-2 text-center border-r">{log.morningOut || '-'}</td>
-                                    <td className="px-2 py-2 text-center border-r">{log.afternoonIn || '-'}</td><td className="px-2 py-2 text-center border-r">{log.afternoonOut || '-'}</td>
-                                    <td className="px-4 py-2 text-center border-r font-bold">{log.hoursWorked > 0 ? log.hoursWorked : ''}</td>
-                                    <td className="px-4 py-2"><span className={`px-2 py-0.5 rounded text-xs ${log.status === 'Present' ? 'bg-green-100 text-green-700' : log.status === 'Absent' ? 'text-red-600 font-bold' : ''}`}>{log.status}</span></td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            ) : <div className="text-center py-10 text-gray-500 italic">No data generated yet.</div>}
-        </div>
-    );
-};
-
-// =========================================================
-// SECTION 2: ACCOMPLISHMENT REPORTS (Simplified)
-// =========================================================
-const CreateReportForm = ({ user, form, setForm, handleSubmit, submitting }) => {
-    const [uploadingImage, setUploadingImage] = useState(null); 
-    const handleImageChange = async (index, file) => {
-        setUploadingImage(index);
-        const imageUrl = await uploadImageToCloudinary(file);
-        setUploadingImage(null);
-        if (imageUrl) {
-            const newImages = [...form.images]; newImages[index] = imageUrl; 
-            setForm(prev => ({ ...prev, images: newImages }));
+          console.error("Tracing Error:", error);
+          setTracedSupervisorName("Error Loading Data");
         }
+      } else {
+        setTracedSupervisorName("Select an Intern");
+      }
     };
-    return (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm mb-6">
-            <h3 className="text-xl font-medium text-gray-900 mb-4">New Report</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                    <select value={form.type} onChange={(e) => setForm(prev => ({ ...prev, type: e.target.value }))} className={`w-full px-4 py-2 border rounded-lg ${PRIMARY_FOCUS_RING}`}>
-                        <option value="weekly">Weekly</option><option value="monthly">Monthly</option>
-                    </select>
-                    <input type="text" value={form.title} onChange={(e) => setForm(prev => ({ ...prev, title: e.target.value }))} className={`w-full px-4 py-2 border rounded-lg ${PRIMARY_FOCUS_RING}`} placeholder="Title" required />
-                </div>
-                {form.type === 'weekly' ? (
-                    <div className="grid grid-cols-2 gap-4">
-                        <DatePicker selected={form.startDate} onChange={(date) => setForm(prev => ({ ...prev, startDate: date }))} className="w-full px-4 py-2 border rounded-lg" required placeholderText="Start Date"/>
-                        <DatePicker selected={form.endDate} onChange={(date) => setForm(prev => ({ ...prev, endDate: date }))} className="w-full px-4 py-2 border rounded-lg" required placeholderText="End Date"/>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-2 gap-4">
-                         <select value={form.month} onChange={(e) => setForm(prev => ({ ...prev, month: e.target.value }))} className="w-full px-4 py-2 border rounded-lg">{['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => <option key={m} value={m}>{m}</option>)}</select>
-                         <select value={form.year} onChange={(e) => setForm(prev => ({ ...prev, year: e.target.value }))} className="w-full px-4 py-2 border rounded-lg">{[0,1,2].map(i => <option key={i} value={String(getCurrentYear() - i)}>{getCurrentYear() - i}</option>)}</select>
-                    </div>
-                )}
-                <textarea value={form.content} onChange={(e) => setForm(prev => ({ ...prev, content: e.target.value }))} placeholder="Content (Min 100 words)..." rows="5" className="w-full px-4 py-3 border rounded-lg" />
-                <div className="flex gap-4">
-                    {[0, 1, 2].map((index) => (
-                        <div key={index} className="w-20 h-20 border border-dashed border-gray-300 rounded-lg flex items-center justify-center relative bg-gray-50">
-                            {uploadingImage === index ? <Loader2 className="animate-spin" /> : form.images[index] ? <img src={form.images[index]} className="w-full h-full object-cover rounded-lg" /> : <label className="cursor-pointer flex flex-col items-center"><Plus size={20} className="text-gray-400" /><input type="file" className="hidden" accept="image/*" onChange={(e) => e.target.files.length && handleImageChange(index, e.target.files[0])} /></label>}
-                        </div>
-                    ))}
-                </div>
-                <button type="submit" disabled={submitting || form.images.filter(i=>i).length !== 3} className="w-full bg-[#0094FF] text-white py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
-                    <Send size={18} /> {submitting ? 'Submitting...' : 'Submit Report'}
-                </button>
-            </form>
+    traceSupervisor();
+  }, [selectedInternId, user.role]);
+
+  const iName = isManager ? interns.find((i) => i.id === selectedInternId)?.name || "Intern" : user.firstName ? `${user.firstName} ${user.lastName}` : user.name;
+  const dateRange = `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`;
+  const totalHours = logs.reduce((sum, log) => sum + (parseFloat(log.hoursWorked) || 0), 0).toFixed(2);
+
+  const handlePrint = () => {
+    printWebDTR(iName, startDate, endDate, logs, tracedSupervisorName);
+  };
+
+  const handleExportPDF = () => {
+    const element = document.getElementById("dtr-export-template");
+    if (!element) return toast.error("Template not found");
+    toast.loading("Generating PDF...", { id: "pdf_gen" });
+    element.style.display = "block";
+    html2canvas(element, { scale: 2, useCORS: true, scrollY: 0, scrollX: 0, backgroundColor: "#ffffff" })
+      .then((canvas) => {
+        element.style.display = "none";
+        const imgData = canvas.toDataURL("image/png");
+        const pdf = new jsPDF("p", "mm", "a4");
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const imgProps = pdf.getImageProperties(imgData);
+        const imgRatio = imgProps.width / imgProps.height;
+        let finalWidth = pdfWidth;
+        let finalHeight = pdfWidth / imgRatio;
+        if (finalHeight > pdfHeight) {
+          finalHeight = pdfHeight;
+          finalWidth = finalHeight * imgRatio;
+        }
+        const x = (pdfWidth - finalWidth) / 2;
+        const y = 0;
+        pdf.addImage(imgData, "PNG", x, y, finalWidth, finalHeight);
+        pdf.save(`DTR_${iName.replace(/\s+/g, "_")}.pdf`);
+        toast.dismiss("pdf_gen");
+        toast.success("PDF Downloaded!");
+      })
+      .catch((err) => {
+        element.style.display = "none";
+        console.error(err);
+        toast.error("Export Failed");
+      });
+  };
+
+  const generateReport = async () => {
+    if (!selectedInternId) {
+      toast.error("Please select an intern.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const q = query(collection(db, "attendance"), where("internId", "==", selectedInternId), orderBy("date", "asc"));
+      const snapshot = await getDocs(q);
+      const rawLogs = snapshot.docs.map((doc) => doc.data());
+      const filteredLogs = [];
+      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+        const dateKey = getLocalDateString(d);
+        const log = rawLogs.find((r) => r.date === dateKey);
+        if (log) {
+          filteredLogs.push({ date: dateKey, morningIn: log.morningIn, morningOut: log.morningOut, afternoonIn: log.afternoonIn, afternoonOut: log.afternoonOut, hoursWorked: log.hoursWorked || 0, status: log.status || "Present" });
+        } else {
+          const day = d.getDay();
+          const isWeekend = day === 0 || day === 6;
+          filteredLogs.push({ date: dateKey, morningIn: null, morningOut: null, afternoonIn: null, afternoonOut: null, hoursWorked: 0, status: isWeekend ? "Weekend" : "Absent" });
+        }
+      }
+      setLogs(filteredLogs);
+      if (filteredLogs.length > 0) toast.success("Records loaded!");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to load attendance.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const styles = {
+    container: { fontFamily: "Arial, sans-serif", padding: "15mm", color: "#000", backgroundColor: "#fff", width: "210mm", minHeight: "297mm", boxSizing: "border-box" },
+    header: { textAlign: "center", marginBottom: "20px", borderBottom: "2px solid #000", paddingBottom: "10px" },
+    title: { fontSize: "18px", fontWeight: "bold", marginBottom: "5px", textTransform: "uppercase" },
+    subTitle: { fontSize: "14px", color: "#444" },
+    metaInfo: { marginBottom: "20px", fontSize: "12px", display: "flex", justifyContent: "space-between", borderBottom: "1px solid #ccc", paddingBottom: "10px" },
+    table: { width: "100%", borderCollapse: "collapse", fontSize: "11px", marginBottom: "20px" },
+    th: { border: "1px solid #000", padding: "4px", textAlign: "center", backgroundColor: "#f0f0f0", fontWeight: "bold" },
+    td: { border: "1px solid #000", padding: "4px", textAlign: "center" },
+    weekend: { backgroundColor: "#f9f9f9", color: "#888", fontStyle: "italic" },
+    absent: { color: "red", fontWeight: "bold", backgroundColor: "#fff5f5" },
+    footer: { marginTop: "30px", display: "flex", justifyContent: "space-between", fontSize: "12px" },
+    sigBlock: { textAlign: "center", width: "40%" },
+    sigLine: { borderTop: "1px solid #000", marginTop: "40px", paddingTop: "5px", fontWeight: "bold" },
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm relative">
+      <div id="dtr-export-template" style={{ ...styles.container, position: "absolute", top: 0, left: 0, zIndex: -50, display: "none" }}>
+        <div style={styles.header}><div style={styles.title}>DAILY TIME RECORD</div><div style={styles.subTitle}>OJT Management System</div></div>
+        <div style={styles.metaInfo}><div><strong>Name:</strong> {iName}<br /><strong>Period:</strong> {dateRange}</div><div><strong>Total Hours:</strong> {totalHours}</div></div>
+        <table style={styles.table}>
+          <thead>
+            <tr><th rowSpan="2" style={{ ...styles.th, width: "15%" }}>Date</th><th colSpan="2" style={styles.th}>Morning</th><th colSpan="2" style={styles.th}>Afternoon</th><th rowSpan="2" style={{ ...styles.th, width: "10%" }}>Total<br />Hours</th><th rowSpan="2" style={{ ...styles.th, width: "15%" }}>Status</th></tr>
+            <tr><th style={styles.th}>IN</th><th style={styles.th}>OUT</th><th style={styles.th}>IN</th><th style={styles.th}>OUT</th></tr>
+          </thead>
+          <tbody>
+            {logs.map((log, i) => {
+              const dateObj = new Date(log.date);
+              const day = dateObj.getDate();
+              const isWeekend = log.status === "Weekend";
+              const isAbsent = log.status === "Absent";
+              return (
+                <tr key={i} style={isWeekend ? styles.weekend : {}}>
+                  <td style={styles.td}>{day} <span style={{ fontSize: "9px", color: "#555" }}>({dateObj.toLocaleDateString("en-US", { weekday: "short" })})</span></td>
+                  <td style={styles.td}>{log.morningIn || "--"}</td><td style={styles.td}>{log.morningOut || "--"}</td>
+                  <td style={styles.td}>{log.afternoonIn || "--"}</td><td style={styles.td}>{log.afternoonOut || "--"}</td>
+                  <td style={styles.td}>{log.hoursWorked > 0 ? log.hoursWorked : "--"}</td>
+                  <td style={{ ...styles.td, ...(isAbsent ? styles.absent : {}) }}>{log.status}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div style={styles.footer}>
+          <div style={styles.sigBlock}>I certify on my honor that the above is a true and correct report.<div style={styles.sigLine}>{iName}</div><div>Intern Signature</div></div>
+          <div style={styles.sigBlock}>Certified Correct:<div style={styles.sigLine}>{tracedSupervisorName}</div><div>Supervisor / Certifier</div></div>
         </div>
-    );
+      </div>
+
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <div><h3 className="text-xl font-bold text-gray-900 flex items-center gap-2"><BarChart2 className={ACCENT_TEXT} /> Generate Attendance DTR</h3><p className="text-sm text-gray-500">Official time record for filing.</p></div>
+        {logs.length > 0 && (
+          <div className="flex gap-2">
+            <button onClick={handleExportPDF} className="px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 flex items-center gap-2 shadow-sm transition-colors"><Download size={18} /> Export PDF</button>
+            <button onClick={handlePrint} className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-black flex items-center gap-2 shadow-sm transition-colors"><Printer size={18} /> Print</button>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+        {isManager && (
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Select Intern</label>
+            <select className="w-full p-2 border border-gray-300 rounded-md text-sm" value={selectedInternId} onChange={(e) => setSelectedInternId(e.target.value)}>
+              {interns.length === 0 && <option value="">Loading...</option>}
+              {interns.map((i) => (<option key={i.id} value={i.id}>{i.name}</option>))}
+            </select>
+          </div>
+        )}
+        <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Start</label><DatePicker selected={startDate} onChange={(date) => setStartDate(date)} dateFormat="MMM d, yyyy" className="w-full p-2 border border-gray-300 rounded-md text-sm" popperClassName="!z-[9999]" popperPlacement="bottom-start" /></div>
+        <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">End</label><DatePicker selected={endDate} onChange={(date) => setEndDate(date)} dateFormat="MMM d, yyyy" className="w-full p-2 border border-gray-300 rounded-md text-sm" popperClassName="!z-[9999]" popperPlacement="bottom-start" /></div>
+        <div className="flex items-end"><button onClick={generateReport} disabled={loading} className="w-full py-2 bg-[#0094FF] text-white rounded-md hover:bg-blue-600 text-sm font-medium flex items-center justify-center gap-2">{loading ? <Loader2 className="animate-spin" size={16} /> : <Filter size={16} />} Generate</button></div>
+      </div>
+
+      {logs.length > 0 ? (
+        <div className="overflow-x-auto border rounded-lg max-h-[400px]">
+          <table className="w-full text-sm text-left relative">
+            <thead className="text-xs text-gray-500 uppercase bg-gray-100 border-b sticky top-0 z-10">
+              <tr><th rowSpan="2" className="px-4 py-3 border-r">Date</th><th colSpan="2" className="px-4 py-1 text-center border-r border-b">Morning</th><th colSpan="2" className="px-4 py-1 text-center border-r border-b">Afternoon</th><th rowSpan="2" className="px-4 py-3 border-r text-center">Hrs</th><th rowSpan="2" className="px-4 py-3">Status</th></tr>
+              <tr><th className="px-2 py-1 text-center border-r text-xs">IN</th><th className="px-2 py-1 text-center border-r text-xs">OUT</th><th className="px-2 py-1 text-center border-r text-xs">IN</th><th className="px-2 py-1 text-center border-r text-xs">OUT</th></tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 bg-white">
+              {logs.map((log, index) => (
+                <tr key={index} className={`hover:bg-gray-50 ${log.status === "Weekend" ? "bg-gray-50 text-gray-400 italic" : log.status === "Absent" ? "bg-red-50" : ""}`}>
+                  <td className="px-4 py-2 border-r font-medium">{new Date(log.date).getDate()}</td>
+                  <td className="px-2 py-2 text-center border-r">{log.morningIn || "-"}</td><td className="px-2 py-2 text-center border-r">{log.morningOut || "-"}</td>
+                  <td className="px-2 py-2 text-center border-r">{log.afternoonIn || "-"}</td><td className="px-2 py-2 text-center border-r">{log.afternoonOut || "-"}</td>
+                  <td className="px-4 py-2 text-center border-r font-bold">{log.hoursWorked > 0 ? log.hoursWorked : ""}</td>
+                  <td className="px-4 py-2"><span className={`px-2 py-0.5 rounded text-xs ${log.status === "Present" ? "bg-green-100 text-green-700" : log.status === "Absent" ? "text-red-600 font-bold" : ""}`}>{log.status}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : <div className="text-center py-10 text-gray-500 italic">No data generated yet.</div>}
+    </div>
+  );
 };
 
-const ReportList = ({ reports, isSupervisor }) => {
-    const [viewingReport, setViewingReport] = useState(null);
-    if (reports.length === 0) return <div className="text-center py-10 text-gray-500 bg-white rounded-lg border">No reports found.</div>;
-    return (
-        <div className="space-y-4">
-            {viewingReport && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] p-6 overflow-y-auto">
-                        <div className="flex justify-between mb-4"><h3 className="text-xl font-bold">{viewingReport.title}</h3><button onClick={()=>setViewingReport(null)}><X size={24}/></button></div>
-                        <div className="mb-4 text-sm text-gray-600">By {viewingReport.userName} on {viewingReport.date}</div>
-                        <p className="whitespace-pre-wrap text-gray-800 mb-6">{viewingReport.content}</p>
-                        <div className="grid grid-cols-3 gap-2">{viewingReport.images?.map((img,i)=><img key={i} src={img} className="w-full h-24 object-cover rounded"/>)}</div>
-                    </div>
-                </div>
-            )}
-            {reports.map((report) => (
-                <div key={report.id} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-all flex justify-between items-start">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-bold text-gray-900">{report.title}</h3>
-                            <span className={`text-xs px-2 py-0.5 rounded-full border uppercase ${report.type==='weekly'?'bg-blue-50 text-blue-700 border-blue-200':'bg-purple-50 text-purple-700 border-purple-200'}`}>{report.type}</span>
-                        </div>
-                        <div className="text-sm text-gray-500 flex gap-4">
-                            {isSupervisor && <span className="flex items-center gap-1"><User size={14}/> {report.userName}</span>}
-                            <span className="flex items-center gap-1"><Calendar size={14}/> {report.date}</span>
-                        </div>
-                    </div>
-                    <button onClick={()=>setViewingReport(report)} className="text-[#0094FF] hover:bg-blue-50 p-2 rounded"><FileText size={18}/></button>
-                </div>
-            ))}
+const CreateReportForm = ({ user, form, setForm, handleSubmit, submitting }) => {
+    // ... (Keep existing code unchanged)
+  const [uploadingImage, setUploadingImage] = useState(null);
+  const handleImageChange = async (index, file) => {
+    setUploadingImage(index);
+    const imageUrl = await uploadImageToCloudinary(file);
+    setUploadingImage(null);
+    if (imageUrl) {
+      const newImages = [...form.images];
+      newImages[index] = imageUrl;
+      setForm((prev) => ({ ...prev, images: newImages }));
+    }
+  };
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm mb-6">
+      <h3 className="text-xl font-medium text-gray-900 mb-4">New Report</h3>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <select value={form.type} onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value }))} className={`w-full px-4 py-2 border rounded-lg ${PRIMARY_FOCUS_RING}`}><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select>
+          <input type="text" value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} className={`w-full px-4 py-2 border rounded-lg ${PRIMARY_FOCUS_RING}`} placeholder="Title" required />
         </div>
-    );
+        {form.type === "weekly" ? (
+          <div className="grid grid-cols-2 gap-4">
+            <DatePicker selected={form.startDate} onChange={(date) => setForm((prev) => ({ ...prev, startDate: date }))} className="w-full px-4 py-2 border rounded-lg" required placeholderText="Start Date" />
+            <DatePicker selected={form.endDate} onChange={(date) => setForm((prev) => ({ ...prev, endDate: date }))} className="w-full px-4 py-2 border rounded-lg" required placeholderText="End Date" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            <select value={form.month} onChange={(e) => setForm((prev) => ({ ...prev, month: e.target.value }))} className="w-full px-4 py-2 border rounded-lg">{["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"].map((m) => (<option key={m} value={m}>{m}</option>))}</select>
+            <select value={form.year} onChange={(e) => setForm((prev) => ({ ...prev, year: e.target.value }))} className="w-full px-4 py-2 border rounded-lg">{[0, 1, 2].map((i) => (<option key={i} value={String(getCurrentYear() - i)}>{getCurrentYear() - i}</option>))}</select>
+          </div>
+        )}
+        <textarea value={form.content} onChange={(e) => setForm((prev) => ({ ...prev, content: e.target.value }))} placeholder="Content (Min 100 words)..." rows="5" className="w-full px-4 py-3 border rounded-lg" />
+        <div className="flex gap-4">
+          {[0, 1, 2].map((index) => (
+            <div key={index} className="w-20 h-20 border border-dashed border-gray-300 rounded-lg flex items-center justify-center relative bg-gray-50">
+              {uploadingImage === index ? <Loader2 className="animate-spin" /> : form.images[index] ? <img src={form.images[index]} className="w-full h-full object-cover rounded-lg" /> : <label className="cursor-pointer flex flex-col items-center"><Plus size={20} className="text-gray-400" /><input type="file" className="hidden" accept="image/*" onChange={(e) => e.target.files.length && handleImageChange(index, e.target.files[0])} /></label>}
+            </div>
+          ))}
+        </div>
+        <button type="submit" disabled={submitting || form.images.filter((i) => i).length !== 3} className="w-full bg-[#0094FF] text-white py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"><Send size={18} /> {submitting ? "Submitting..." : "Submit Report"}</button>
+      </form>
+    </div>
+  );
+};
+
+// --- UPDATED REPORT LIST WITH CHECKBOXES & BETTER MODAL ---
+const ReportList = ({ reports, isManager, user, selectedIds, onToggleSelect, onSelectAll }) => {
+    // ... (Keep existing code unchanged)
+  const [viewingReport, setViewingReport] = useState(null);
+
+  if (reports.length === 0) return <div className="text-center py-10 text-gray-500 bg-white rounded-lg border">No reports found.</div>;
+
+  return (
+    <div className="space-y-4">
+      {/* SELECTION HEADER */}
+      {isManager && reports.length > 0 && (
+        <div className="flex items-center gap-2 mb-2 px-2">
+           <button onClick={onSelectAll} className="text-xs font-semibold text-blue-600 flex items-center gap-1 hover:underline">
+             <CheckSquare size={14} /> Select All Shown
+           </button>
+        </div>
+      )}
+
+      {/* IMPROVED VIEW MODAL */}
+      {viewingReport && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b flex justify-between items-center bg-gray-50">
+               <div>
+                  <h3 className="text-2xl font-bold text-gray-900">{viewingReport.title}</h3>
+                  <p className="text-sm text-gray-500">Submitted by {viewingReport.userName} • {viewingReport.date}</p>
+               </div>
+               <button onClick={() => setViewingReport(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors"><X size={24} /></button>
+            </div>
+            <div className="p-8 overflow-y-auto flex-1">
+              <div className="prose max-w-none text-gray-800 leading-relaxed mb-8 whitespace-pre-wrap">{viewingReport.content}</div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {viewingReport.images?.map((img, i) => (
+                   <a key={i} href={img} target="_blank" rel="noreferrer" className="group relative">
+                      <img src={img} className="w-full h-48 object-cover rounded-xl shadow-sm group-hover:opacity-90 transition-opacity" alt="Evidence" />
+                   </a>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LIST ITEMS */}
+      {reports.map((report) => (
+        <div key={report.id} className={`bg-white rounded-xl border p-5 shadow-sm hover:shadow-md transition-all flex items-start gap-4 ${selectedIds.includes(report.id) ? 'border-blue-500 bg-blue-50/20' : 'border-gray-200'}`}>
+          {isManager && (
+             <button onClick={() => onToggleSelect(report.id)} className="mt-1 text-gray-400 hover:text-blue-500 transition-colors">
+                {selectedIds.includes(report.id) ? <CheckSquare className="text-blue-600" size={20} /> : <Square size={20} />}
+             </button>
+          )}
+          <div className="flex-1 cursor-pointer" onClick={() => isManager ? onToggleSelect(report.id) : setViewingReport(report)}>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="font-bold text-gray-900">{report.title}</h3>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full border uppercase ${report.type === "weekly" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-purple-50 text-purple-700 border-purple-200"}`}>
+                {report.type}
+              </span>
+            </div>
+            <div className="text-sm text-gray-500 flex gap-4 mt-1">
+              {isManager && <span className="flex items-center gap-1"><User size={14} /> {report.userName}</span>}
+              <span className="flex items-center gap-1"><Calendar size={14} /> {report.date}</span>
+            </div>
+          </div>
+          <button onClick={() => setViewingReport(report)} className="text-[#0094FF] hover:bg-blue-50 p-2 rounded-lg transition-colors"><FileText size={20} /></button>
+        </div>
+      ))}
+    </div>
+  );
 };
 
 // ==========================================
 // MAIN COMPONENT
 // ==========================================
 function ReportsTab({ user }) {
-    const [activeTab, setActiveTab] = useState('accomplishments');
-    const [allReports, setAllReports] = useState([]);
-    const [myReports, setMyReports] = useState([]);
-    const [internList, setInternList] = useState([]);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [submitting, setSubmitting] = useState(false);
-    
-    // Form State
-    const [form, setForm] = useState({
-        title: '', content: '', type: 'weekly',
-        startDate: new Date(), endDate: new Date(),
-        month: String(new Date().getMonth() + 1).padStart(2, '0'),
-        year: String(getCurrentYear()), images: [null, null, null],
+  const [activeTab, setActiveTab] = useState("accomplishments");
+  const [allReports, setAllReports] = useState([]);
+  const [myReports, setMyReports] = useState([]);
+  const [internList, setInternList] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  
+  // NEW STATE FOR SELECTION
+  const [selectedReportIds, setSelectedReportIds] = useState([]);
+
+  const [form, setForm] = useState({
+    title: "", content: "", type: "weekly",
+    startDate: new Date(), endDate: new Date(),
+    month: String(new Date().getMonth() + 1).padStart(2, "0"),
+    year: String(getCurrentYear()), images: [null, null, null],
+  });
+
+  const isManager = ["supervisor", "admin", "coordinator"].includes(user.role);
+
+  // 1. Fetch Interns (UPDATED TO FETCH SUPERVISOR NAME)
+  useEffect(() => {
+    if (isManager) {
+      let q;
+      if (user.role === "supervisor") {
+        q = query(collection(db, "users"), where("role", "==", "intern"), where("supervisorId", "==", user.uid));
+      } else {
+        q = query(collection(db, "users"), where("role", "==", "intern"));
+      }
+      // ⬇️ UPDATED: Now mapping supervisorName from the database
+      getDocs(q).then((snap) => setInternList(snap.docs.map((d) => {
+        const data = d.data();
+        return { 
+            id: d.id, 
+            name: data.firstName ? `${data.firstName} ${data.lastName}` : data.name || "Intern",
+            supervisorName: data.supervisorName // Capture supervisor name here
+        };
+      })));
+    }
+  }, [user, isManager]);
+
+  // 2. Fetch Reports
+  useEffect(() => {
+    let q = isManager ? query(collection(db, "reports"), orderBy("createdAt", "desc")) : query(collection(db, "reports"), where("userId", "==", user.uid), orderBy("createdAt", "desc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (isManager) setAllReports(data); else setMyReports(data);
     });
+    return () => unsub();
+  }, [user, isManager]);
 
-    // 1. Fetch Interns (Supervisor Only)
-    useEffect(() => {
-        if (user.role === 'supervisor') {
-            const q = query(collection(db, 'users'), where('role', '==', 'intern'), where('supervisorId', '==', user.uid));
-            getDocs(q).then(snap => setInternList(snap.docs.map(d => ({ id: d.id, name: d.data().firstName ? `${d.data().firstName} ${d.data().lastName}` : d.data().name || 'Intern' }))));
-        }
-    }, [user]);
+  // 3. RELEVANT REPORTS logic
+  const relevantReports = useMemo(() => {
+    if (!isManager) return myReports;
+    if (user.role === "admin" || user.role === "coordinator") return allReports;
+    if (user.role === "supervisor") {
+      const assignedInternIds = new Set(internList.map((i) => i.id));
+      return allReports.filter((report) => assignedInternIds.has(report.userId));
+    }
+    return [];
+  }, [isManager, user.role, allReports, myReports, internList]);
 
-    // 2. Fetch Reports
-    useEffect(() => {
-        let q = user.role === 'supervisor' 
-            ? query(collection(db, 'reports'), orderBy('createdAt', 'desc'))
-            : query(collection(db, 'reports'), where('userId', '==', user.uid), orderBy('createdAt', 'desc'));
+  // ⬇️ HELPER: RESOLVE SUPERVISOR NAME FOR PRINT
+  const resolveSupervisorName = (reportUserId) => {
+    // If I am the supervisor/admin/manager
+    if (user.role === "supervisor") return user.firstName ? `${user.firstName} ${user.lastName}` : user.name;
+    
+    // If I am the intern (user)
+    if (user.role === "intern") return user.supervisorName || "Unassigned";
 
-        const unsub = onSnapshot(q, (snap) => {
-            const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            if (user.role === 'supervisor') setAllReports(data);
-            else setMyReports(data);
-        });
-        return () => unsub();
-    }, [user]);
+    // If I am Admin/Coordinator, look up the intern in the fetched list
+    const intern = internList.find(i => i.id === reportUserId);
+    return intern?.supervisorName || "_______________________";
+  };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setSubmitting(true);
-        const period = form.type === 'weekly' ? `${form.startDate.toISOString().slice(0, 10)} to ${form.endDate.toISOString().slice(0, 10)}` : `${form.month}/${form.year}`;
-        try {
-            await addDoc(collection(db, 'reports'), {
-                title: form.title, content: form.content, type: form.type, date: period,
-                images: form.images.filter(i => i), userId: user.uid,
-                userName: user.firstName ? `${user.firstName} ${user.lastName}` : user.name || 'Intern',
-                createdAt: serverTimestamp(), status: 'submitted'
+  const filteredReports = relevantReports.filter((r) => r.userName?.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  // 4. BULK ACTION HANDLERS
+  const toggleReportSelection = (id) => {
+    setSelectedReportIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedReportIds.length === filteredReports.length) setSelectedReportIds([]);
+    else setSelectedReportIds(filteredReports.map(r => r.id));
+  };
+
+  // HANDLE BULK PRINT
+  const handleBulkPrint = () => {
+    const element = document.getElementById("accomplishment-export-template");
+    if (!element) return toast.error("Nothing to print");
+
+    // Get the inner content
+    const content = element.innerHTML;
+    
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return toast.error("Please allow popups to print");
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Print Reports</title>
+          <style>
+            body { margin: 0; padding: 0; background-color: white; }
+            img { max-width: 100%; height: auto; }
+            @media print {
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+              @page { size: auto; margin: 0; } /* Removes headers/footers */
+            }
+          </style>
+        </head>
+        <body>
+          ${content}
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.focus();
+                window.print();
+              }, 500); 
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    
+    printWindow.document.close();
+  };
+
+  // HANDLE BULK PDF
+  const handleBulkPDF = async () => {
+    // ... (Keep existing code unchanged)
+    const template = document.getElementById("accomplishment-export-template");
+    if (!template) {
+        toast.error("Export element not found");
+        return;
+    }
+    
+    const reportElements = template.querySelectorAll(".printable-report-item");
+    
+    if (!reportElements || reportElements.length === 0) {
+        toast.error("No reports to export");
+        return;
+    }
+
+    toast.loading(`Generating PDF (${reportElements.length} pages)...`, { id: "bulk_pdf" });
+
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+
+    try {
+        for (let i = 0; i < reportElements.length; i++) {
+            const element = reportElements[i];
+            const canvas = await html2canvas(element, { 
+                scale: 2, 
+                useCORS: true, 
+                backgroundColor: "#ffffff"
             });
-            toast.success("Submitted!"); setForm({ ...form, title: '', content: '', images: [null,null,null] });
-        } catch (err) { toast.error("Error submitting"); } finally { setSubmitting(false); }
-    };
 
-    const filteredReports = allReports.filter(r => r.userName?.toLowerCase().includes(searchTerm.toLowerCase()));
-
-    return (
-        <div className="space-y-6">
-            <Toaster position="top-right" />
+            const imgData = canvas.toDataURL("image/png");
             
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div><h1 className="text-3xl font-bold text-gray-900">Reports & Analytics</h1><p className="text-gray-600">Unified view for accomplishments and official time records.</p></div>
-                <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
-                    <button onClick={() => setActiveTab('accomplishments')} className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'accomplishments' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>Accomplishment Reports</button>
-                    <button onClick={() => setActiveTab('attendance')} className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'attendance' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>Attendance DTR</button>
-                </div>
-            </div>
+            const imgProps = pdf.getImageProperties(imgData);
+            const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
-            {/* SUPERVISOR DASHBOARD */}
-            {user.role === 'supervisor' && <SupervisorDashboard allReports={allReports} />}
+            if (i > 0) {
+                pdf.addPage();
+            }
 
-            {/* CONTENT AREA */}
-            {activeTab === 'attendance' ? (
-                <AttendanceDTRSection user={user} interns={internList} isSupervisor={user.role === 'supervisor'} />
-            ) : (
-                <div className="space-y-8 animate-in fade-in duration-300">
-                    {user.role === 'intern' && <CreateReportForm user={user} form={form} setForm={setForm} handleSubmit={handleSubmit} submitting={submitting} />}
-                    <div>
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-xl font-bold text-gray-900">{user.role === 'supervisor' ? 'Submitted Reports' : 'My History'}</h3>
-                            {user.role === 'supervisor' && <div className="relative"><Search className="absolute left-3 top-2.5 text-gray-400" size={16}/><input type="text" placeholder="Search intern..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"/></div>}
-                        </div>
-                        <ReportList reports={user.role === 'supervisor' ? filteredReports : myReports} isSupervisor={user.role === 'supervisor'} />
-                    </div>
-                </div>
-            )}
+            pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, imgHeight);
+        }
+
+        pdf.save(`OJT_Reports_Batch_${new Date().getTime()}.pdf`);
+        toast.dismiss("bulk_pdf");
+        toast.success("PDF Downloaded");
+
+    } catch (err) {
+        console.error(err);
+        toast.dismiss("bulk_pdf");
+        toast.error("PDF Generation failed");
+    }
+  };
+
+  const handleSubmit = async (e) => {
+      // ... (Keep existing code unchanged)
+    e.preventDefault();
+    setSubmitting(true);
+    const period = form.type === "weekly" ? `${form.startDate.toISOString().slice(0, 10)} to ${form.endDate.toISOString().slice(0, 10)}` : `${form.month}/${form.year}`;
+    try {
+      await addDoc(collection(db, "reports"), {
+        title: form.title, content: form.content, type: form.type, date: period, images: form.images.filter((i) => i),
+        userId: user.uid, userName: user.firstName ? `${user.firstName} ${user.lastName}` : user.name || "Intern",
+        createdAt: serverTimestamp(), status: "submitted",
+      });
+      toast.success("Submitted!");
+      setForm({ ...form, title: "", content: "", images: [null, null, null] });
+    } catch (err) { toast.error("Error submitting"); } finally { setSubmitting(false); }
+  };
+
+  return (
+    <div className="space-y-6 pb-20">
+      <Toaster position="top-right" />
+      
+      {/* HIDDEN TEMPLATE FOR BULK EXPORT */}
+      <div 
+        id="accomplishment-export-template" 
+        style={{ 
+          position: "absolute", 
+          top: "-9999px", 
+          left: "-9999px",
+          width: "210mm",
+          zIndex: -1
+        }}
+      >
+        {/* ⬇️ UPDATED: Passing mapped reports with supervisorName */}
+        <ReportPrint 
+           reports={relevantReports
+              .filter(r => selectedReportIds.includes(r.id))
+              .map(r => ({ ...r, supervisorName: resolveSupervisorName(r.userId) }))
+           } 
+        />
+      </div>
+
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div><h1 className="text-3xl font-bold text-gray-900">Reports & Analytics</h1><p className="text-gray-600">Unified view for accomplishments and official time records.</p></div>
+        <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+          <button onClick={() => setActiveTab("accomplishments")} className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === "accomplishments" ? "bg-white text-blue-600 shadow-sm" : "text-gray-600 hover:text-gray-900"}`}>Accomplishment Reports</button>
+          <button onClick={() => setActiveTab("attendance")} className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === "attendance" ? "bg-white text-blue-600 shadow-sm" : "text-gray-600 hover:text-gray-900"}`}>Attendance DTR</button>
         </div>
-    );
+      </div>
+
+      {isManager && <SupervisorDashboard relevantReports={relevantReports} />}
+
+      {activeTab === "attendance" ? (
+        <AttendanceDTRSection user={user} interns={internList} isManager={isManager} />
+      ) : (
+        <div className="space-y-8 animate-in fade-in duration-300">
+          {user.role === "intern" && <CreateReportForm user={user} form={form} setForm={setForm} handleSubmit={handleSubmit} submitting={submitting} />}
+          <div>
+            <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+              <h3 className="text-xl font-bold text-gray-900">{isManager ? "Submitted Reports" : "My History"}</h3>
+              
+              <div className="flex gap-2 w-full md:w-auto">
+                <div className="relative flex-1 md:flex-none">
+                  <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
+                  <input type="text" placeholder="Search intern..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
+                </div>
+                
+                {/* BULK ACTION BUTTONS */}
+                {isManager && selectedReportIds.length > 0 && (
+                  <div className="flex gap-2 animate-in slide-in-from-right-4 fade-in">
+                    <button onClick={handleBulkPDF} className="px-4 py-2 bg-white border text-gray-700 rounded-lg hover:bg-gray-50 flex items-center gap-2 shadow-sm"><Download size={16} /> PDF</button>
+                    <button onClick={handleBulkPrint} className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-black flex items-center gap-2 shadow-sm"><Printer size={16} /> Print ({selectedReportIds.length})</button>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <ReportList 
+                reports={filteredReports} 
+                isManager={isManager} 
+                user={user} 
+                selectedIds={selectedReportIds}
+                onToggleSelect={toggleReportSelection}
+                onSelectAll={handleSelectAll}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default ReportsTab;

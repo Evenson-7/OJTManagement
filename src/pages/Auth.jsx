@@ -3,27 +3,42 @@ import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebaseConfig';
-import { useAuth } from '../context/AuthContext'; // Assuming you created AuthContext.jsx
 import toast, { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- ( COLOR PALETTE ) ---
-// PRIMARY: "#42A5FF" // Sky Blue
-// ACCENT: "#0094FF" // Deep Blue Accent
-// NAVY: "#002B66" // Navy Blue
-// LIGHT_ACCENT: "#BDE4F7" // Light Cyan Tint
-
-// Primary brand color class (used for main buttons, highlights)
 const BRAND_COLOR = 'bg-gradient-to-r from-[#42A5FF] to-[#0094FF]'; 
-// Hover/Focus for main button
 const BRAND_HOVER_FOCUS = 'hover:from-[#0094FF] hover:to-[#002B66] focus:ring-[#42A5FF]';
-// Accent text/border color
 const ACCENT_TEXT_BORDER = 'text-[#0094FF] border-[#0094FF] focus:ring-[#0094FF] focus:border-[#0094FF]';
-// Background for the Step Icons
 const ICON_BG = 'bg-[#42A5FF]'; 
-// Progress Bar gradient
 const PROGRESS_BAR_GRADIENT = 'bg-gradient-to-r from-[#0094FF] to-[#42A5FF]';
 
+// --- ( DATA: COLLEGES & PROGRAMS ) ---
+// This matches the AdminDash IDs to ensure Coordinators see the right students.
+const COLLEGES = [
+  { id: 'college_ccs', code: 'CCS', name: 'College of Computer Studies' },
+  { id: 'college_cbe', code: 'CBE', name: 'College of Business Education' },
+  { id: 'college_cte', code: 'CTE', name: 'College of Teacher Education' }
+];
+
+const PROGRAMS = {
+  college_ccs: [
+    { code: 'BSIT', name: 'Bachelor of Science in Information Technology' },
+    { code: 'ACT', name: 'Associate in Computer Technology' }
+  ],
+  college_cbe: [
+    { code: 'BSBA-MM', name: 'BSBA Major in Marketing Management' },
+    { code: 'BSBA-FM', name: 'BSBA Major in Financial Management' },
+    { code: 'BSBA-OM', name: 'BSBA Major in Operations Management' },
+    { code: 'BSEntrep', name: 'Bachelor of Science in Entrepreneurship' }
+  ],
+  college_cte: [
+    { code: 'BEEd', name: 'Bachelor of Elementary Education' },
+    { code: 'BSEd-Eng', name: 'BSEd Major in English' },
+    { code: 'BSEd-Math', name: 'BSEd Major in Mathematics' },
+    { code: 'TCP', name: 'Teacher Certificate Program' }
+  ]
+};
 
 // --- ( SVG ICONS ) ---
 const CheckIcon = () => (
@@ -55,11 +70,6 @@ const OfficeIcon = () => (
 const BriefcaseIcon = () => (
   <svg className="w-5 h-5 text-[#0094FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-  </svg>
-);
-const KeyIcon = () => (
-  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
   </svg>
 );
 const EyeIcon = () => (
@@ -124,6 +134,7 @@ const ProgressBar = ({ currentStep, totalSteps }) => {
   );
 };
 
+// Generic Input Field
 const InputField = ({ name, value, onChange, placeholder, type = "text", icon, disabled, showToggle, onToggle }) => (
   <div className="relative">
     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -135,7 +146,6 @@ const InputField = ({ name, value, onChange, placeholder, type = "text", icon, d
       value={value}
       onChange={onChange}
       disabled={disabled}
-      // Updated focus ring/border to use ACCENT_TEXT_BORDER
       className={`block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${ACCENT_TEXT_BORDER} bg-white/50 backdrop-blur-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed`}
       placeholder={placeholder}
       required
@@ -150,6 +160,34 @@ const InputField = ({ name, value, onChange, placeholder, type = "text", icon, d
         {type === 'password' ? <EyeIcon /> : <EyeOffIcon />}
       </button>
     )}
+  </div>
+);
+
+// New Select Field Component
+const SelectField = ({ name, value, onChange, options, placeholder, icon, disabled }) => (
+  <div className="relative">
+    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+      {icon}
+    </div>
+    <select
+      name={name}
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      className={`block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${ACCENT_TEXT_BORDER} bg-white/50 backdrop-blur-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed appearance-none`}
+      required
+    >
+      <option value="" disabled>{placeholder}</option>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+    {/* Custom Dropdown Arrow */}
+    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400">
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+    </div>
   </div>
 );
 // --- ( END REUSABLE COMPONENTS ) ---
@@ -172,31 +210,37 @@ const Auth = () => {
   const [isSigningUp, setIsSigningUp] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
   
-  // Combined form state
+  // State
   const initialState = {
     email: '', password: '', confirmPassword: '',
     firstName: '', lastName: '', phoneNumber: '',
-    school: '', course: '', companyName: '',
-    department: '', accessCode: '', position: ''
+    school: '', // This will serve as University Name
+    departmentId: '', // NEW: To link with College
+    course: '', // This will hold the Program Code
+    companyName: '',
+    department: '', // For Supervisor/Intern Company Dept
+    position: ''
   };
   const [formData, setFormData] = useState(initialState);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Logic: If Department changes, clear the course to prevent mismatches
+    if (name === 'departmentId') {
+      setFormData(prev => ({ ...prev, course: '' }));
+    }
   };
-
-  const SUPERVISOR_ACCESS_CODE = "000000";
 
   const internSteps = [
     { title: 'Account Setup', icon: <LockIcon />, fields: ['email', 'password', 'confirmPassword'] },
     { title: 'Personal Information', icon: <UserIcon />, fields: ['firstName', 'lastName', 'phoneNumber'] },
-    { title: 'Educational Background', icon: <AcademicIcon />, fields: ['school', 'course'] },
+    { title: 'Educational Background', icon: <AcademicIcon />, fields: ['school', 'departmentId', 'course'] },
     { title: 'Internship Details', icon: <OfficeIcon />, fields: ['companyName', 'department'] }
   ];
 
   const supervisorSteps = [
-    { title: 'Access Verification', icon: <KeyIcon />, fields: ['accessCode'] },
     { title: 'Account Setup', icon: <LockIcon />, fields: ['email', 'password', 'confirmPassword'] },
     { title: 'Personal Information', icon: <UserIcon />, fields: ['firstName', 'lastName', 'phoneNumber'] },
     { title: 'Professional Details', icon: <BriefcaseIcon />, fields: ['companyName', 'department', 'position'] }
@@ -211,17 +255,9 @@ const Auth = () => {
     return currentFields.every(field => formData[field]?.trim());
   };
 
-  const validateAccessCode = () => {
-    return formData.accessCode.trim() === SUPERVISOR_ACCESS_CODE;
-  };
-
   const handleNext = () => {
     if (validateCurrentStep()) {
-      if (isSupervisorMode && currentStep === 0 && !validateAccessCode()) {
-        setError('Invalid access code. Please contact your administrator.');
-        return;
-      }
-      if ((isSupervisorMode && currentStep === 1) || (!isSupervisorMode && currentStep === 0)) {
+      if (currentStep === 0) {
         if (formData.password !== formData.confirmPassword) {
           setError('Passwords do not match');
           return;
@@ -229,7 +265,7 @@ const Auth = () => {
         if (formData.password.length < 6) {
           setError('Password must be at least 6 characters long');
           return;
-          }
+        }
       }
       setError('');
       setCurrentStep(prev => Math.min(prev + 1, getCurrentSteps().length - 1));
@@ -273,7 +309,7 @@ const Auth = () => {
   const handleSignUp = async (e) => {
     e.preventDefault();
     setError('');
-    const { email, password, confirmPassword, accessCode, ...profileData } = formData;
+    const { email, password, confirmPassword, ...profileData } = formData;
 
     if (!email || !password || !confirmPassword) {
       setError('Please fill in all required fields');
@@ -287,10 +323,7 @@ const Auth = () => {
       setError('Password must be at least 6 characters long');
       return;
     }
-    if (isSupervisorMode && accessCode.trim() !== SUPERVISOR_ACCESS_CODE) {
-      setError('Invalid access code. Please contact your administrator.');
-      return;
-    }
+
     setIsSigningUp(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -298,14 +331,24 @@ const Auth = () => {
       await updateProfile(user, {
         displayName: `${profileData.firstName} ${profileData.lastName}`
       });
+      
       const userData = {
         ...profileData,
         email: email,
         createdAt: new Date(),
         role: isSupervisorMode ? 'supervisor' : 'intern'
       };
+      
+      // Clean up fields based on role
       delete userData.confirmPassword;
-      delete userData.accessCode;
+      if (isSupervisorMode) {
+        delete userData.school;
+        delete userData.course;
+        delete userData.departmentId; // Supervisor uses 'department' text, not ID
+      } else {
+        delete userData.position;
+      }
+      
       await setDoc(doc(db, 'users', user.uid), userData);
       toast.success(`${isSupervisorMode ? 'Supervisor' : 'Intern'} account created successfully!`);
       setTimeout(() => navigate('/dashboard'), 1500);
@@ -368,7 +411,6 @@ const Auth = () => {
     resetForm();
   };
 
-  // Animation variants for Framer Motion
   const containerVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 100 } },
@@ -381,8 +423,7 @@ const Auth = () => {
         position="top-right"
         toastOptions={{
           duration: 4000,
-          // Updated toast colors to use a custom blue/navy for success and keep the original red for error
-          success: { style: { background: '#002B66', color: 'white' } }, // Using Navy Blue
+          success: { style: { background: '#002B66', color: 'white' } }, 
           error: { style: { background: '#EF4444', color: 'white' } },
         }}
       />
@@ -392,7 +433,6 @@ const Auth = () => {
           
           {/* Header */}
           <div className="text-center mb-8">
-            {/* Header Icon BG updated */}
             <div className={`inline-flex items-center justify-center w-16 h-16 ${BRAND_COLOR} rounded-2xl mb-4 shadow-lg`}>
               <AnimatePresence mode="wait">
                 <motion.div
@@ -414,7 +454,6 @@ const Auth = () => {
             </p>
           </div>
 
-          {/* Registration-Only UI Block with Animation */}
           <AnimatePresence>
             {!isLogin && !showForgotPassword && (
               <motion.div
@@ -432,7 +471,6 @@ const Auth = () => {
                       onClick={() => setIsSupervisorMode(false)}
                       disabled={isSigningUp}
                       className={`py-2 px-4 rounded-md text-sm font-medium transition-all duration-200 ${
-                        // Updated active color
                         !isSupervisorMode
                           ? 'bg-white text-[#0094FF] shadow-sm' 
                           : 'text-gray-600 hover:text-gray-800'
@@ -445,7 +483,6 @@ const Auth = () => {
                       onClick={() => toggleSupervisorMode()}
                       disabled={isSigningUp}
                       className={`py-2 px-4 rounded-md text-sm font-medium transition-all duration-200 ${
-                        // Updated active color
                         isSupervisorMode
                           ? 'bg-white text-[#0094FF] shadow-sm'
                           : 'text-gray-600 hover:text-gray-800'
@@ -463,7 +500,6 @@ const Auth = () => {
 
                 <div className="mb-6">
                   <div className="flex items-center space-x-2 mb-2">
-                    {/* Step Icon BG updated */}
                     <div className={`p-2 rounded-full ${ICON_BG} text-white`}> 
                       {getCurrentSteps()[currentStep].icon}
                     </div>
@@ -476,17 +512,14 @@ const Auth = () => {
             )}
           </AnimatePresence>
           
-          {/* Error Message */}
           {error && (
             <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg text-sm">
               {error}
             </div>
           )}
 
-          {/* Form Area */}
           <form className="flex-grow flex flex-col" onSubmit={showForgotPassword ? handleForgotPassword : isLogin ? handleSignIn : handleSignUp}>
             
-            {/* Animated Form Content */}
             <div className="flex-grow">
               <AnimatePresence mode="wait">
                 {/* Login Form */}
@@ -523,7 +556,6 @@ const Auth = () => {
                     <button
                       type="submit"
                       disabled={isLoading}
-                      // Updated Button BG and Hover/Focus
                       className={`w-full mt-6 ${BRAND_COLOR} text-white py-3 px-4 rounded-lg font-medium ${BRAND_HOVER_FOCUS} focus:outline-none focus:ring-2 focus:ring-offset-2 transform hover:scale-[1.02] transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center`}
                     >
                       {isLoading ? (<><LoadingSpinner /><span className="ml-2">Signing In...</span></>) : 'Sign In'}
@@ -541,28 +573,17 @@ const Auth = () => {
                     exit="exit"
                   >
                     <div className="space-y-4">
-                      {isSupervisorMode && currentStep === 0 && (
-                        <>
-                          <div className="bg-gray-100 border border-gray-200 rounded-lg p-4">
-                            <div className="flex items-center space-x-2 mb-2">
-                              <KeyIcon />
-                              <span className="text-sm font-medium text-gray-800">Supervisor Access Required</span>
-                            </div>
-                            <p className="text-sm text-gray-700">
-                              Please enter the supervisor access code: <code className="bg-gray-200 px-2 py-1 rounded text-xs">000000</code>
-                            </p>
-                          </div>
-                          <InputField name="accessCode" value={formData.accessCode} onChange={handleChange} placeholder="Enter access code" type="password" icon={<KeyIcon />} disabled={isSigningUp} />
-                        </>
-                      )}
-                      {((isSupervisorMode && currentStep === 1) || (!isSupervisorMode && currentStep === 0)) && (
+                      {/* Step 0: Account Setup */}
+                      {currentStep === 0 && (
                         <>
                           <InputField name="email" value={formData.email} onChange={handleChange} placeholder="Email address" type="email" icon={<UserIcon />} disabled={isSigningUp} />
                           <InputField name="password" value={formData.password} onChange={handleChange} placeholder="Password" type={showPassword ? "text" : "password"} icon={<LockIcon />} disabled={isSigningUp} showToggle={true} onToggle={() => setShowPassword(!showPassword)} />
                           <InputField name="confirmPassword" value={formData.confirmPassword} onChange={handleChange} placeholder="Confirm password" type={showConfirmPassword ? "text" : "password"} icon={<LockIcon />} disabled={isSigningUp} showToggle={true} onToggle={() => setShowConfirmPassword(!showConfirmPassword)} />
                         </>
                       )}
-                      {((isSupervisorMode && currentStep === 2) || (!isSupervisorMode && currentStep === 1)) && (
+                      
+                      {/* Step 1: Personal Info */}
+                      {currentStep === 1 && (
                         <>
                           <div className="grid grid-cols-2 gap-3">
                             <InputField name="firstName" value={formData.firstName} onChange={handleChange} placeholder="First name" icon={<></>} disabled={isSigningUp} />
@@ -571,42 +592,83 @@ const Auth = () => {
                           <InputField name="phoneNumber" value={formData.phoneNumber} onChange={handleChange} placeholder="Phone number" type="tel" icon={<></>} disabled={isSigningUp} />
                         </>
                       )}
+
+                      {/* Step 2: Intern vs Supervisor */}
                       {!isSupervisorMode && currentStep === 2 && (
                         <>
-                          <InputField name="school" value={formData.school} onChange={handleChange} placeholder="School/University" icon={<AcademicIcon />} disabled={isSigningUp} />
-                          <InputField name="course" value={formData.course} onChange={handleChange} placeholder="Course/Program" icon={<AcademicIcon />} disabled={isSigningUp} />
+                          {/* UNIVERSITY NAME */}
+                          <InputField 
+                            name="school" 
+                            value={formData.school} 
+                            onChange={handleChange} 
+                            placeholder="University/School Name" 
+                            icon={<AcademicIcon />} 
+                            disabled={isSigningUp} 
+                          />
+
+                          {/* COLLEGE / DEPARTMENT DROPDOWN */}
+                          <SelectField
+                            name="departmentId"
+                            value={formData.departmentId}
+                            onChange={handleChange}
+                            options={COLLEGES.map(c => ({ value: c.id, label: `(${c.code}) ${c.name}` }))}
+                            placeholder="Select College / Department"
+                            icon={<AcademicIcon />}
+                            disabled={isSigningUp}
+                          />
+
+                          {/* COURSE DROPDOWN (Filtered by College) */}
+                          <SelectField
+                            name="course"
+                            value={formData.course}
+                            onChange={handleChange}
+                            options={formData.departmentId && PROGRAMS[formData.departmentId] 
+                              ? PROGRAMS[formData.departmentId].map(p => ({ value: p.code, label: p.name })) 
+                              : []
+                            }
+                            placeholder={formData.departmentId ? "Select Program / Course" : "Select College First"}
+                            icon={<AcademicIcon />}
+                            disabled={!formData.departmentId || isSigningUp}
+                          />
                         </>
                       )}
-                      {((isSupervisorMode && currentStep === 3) || (!isSupervisorMode && currentStep === 3)) && (
+
+                      {isSupervisorMode && currentStep === 2 && (
                         <>
                           <InputField name="companyName" value={formData.companyName} onChange={handleChange} placeholder="Company name" icon={<OfficeIcon />} disabled={isSigningUp} />
                           <InputField name="department" value={formData.department} onChange={handleChange} placeholder="Department" icon={<OfficeIcon />} disabled={isSigningUp} />
-                          {isSupervisorMode && (
-                            <InputField name="position" value={formData.position} onChange={handleChange} placeholder="Position/Title" icon={<BriefcaseIcon />} disabled={isSigningUp} />
-                          )}
+                          <InputField name="position" value={formData.position} onChange={handleChange} placeholder="Position/Title" icon={<BriefcaseIcon />} disabled={isSigningUp} />
+                        </>
+                      )}
+
+                      {/* Step 3: Intern (Company) */}
+                      {!isSupervisorMode && currentStep === 3 && (
+                         <>
+                          <InputField name="companyName" value={formData.companyName} onChange={handleChange} placeholder="Company name" icon={<OfficeIcon />} disabled={isSigningUp} />
+                          <InputField name="department" value={formData.department} onChange={handleChange} placeholder="Department (Intern)" icon={<OfficeIcon />} disabled={isSigningUp} />
                         </>
                       )}
                     </div>
+
                     <div className="flex justify-between mt-6">
                       {currentStep > 0 ? (
                         <button 
                           type="button" 
                           onClick={handleBack} 
                           disabled={isSigningUp} 
-                          // Updated button focus ring
                           className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-[#0094FF] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <ArrowLeftIcon />
                           <span>Back</span>
                         </button>
                       ) : ( <div></div> )}
+                      
                       {currentStep < getCurrentSteps().length - 1 ? (
                         <button 
                           type="button" 
                           onClick={handleNext} 
                           disabled={isSigningUp} 
-                          // Updated Button BG and Hover/Focus
-                          className={`flex items-center space-x-2 px-6 py-2 ${BRAND_COLOR} ${BRAND_HOVER_FOCUS} text-white rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${currentStep === 0 ? 'w-full justify-center' : 'ml-auto'}`}
+                          className={`flex items-center space-x-2 px-6 py-2 ${BRAND_COLOR} ${BRAND_HOVER_FOCUS} text-white rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ml-auto`}
                         >
                           <span>Next</span>
                           <ArrowRightIcon />
@@ -615,7 +677,6 @@ const Auth = () => {
                         <button 
                           type="submit" 
                           disabled={isSigningUp} 
-                          // Updated Button BG and Hover/Focus (using darker shades for final action)
                           className="flex items-center space-x-2 px-6 py-2 bg-gradient-to-r from-[#0094FF] to-[#002B66] text-white rounded-lg font-medium hover:from-[#002B66] hover:to-[#002B66] focus:outline-none focus:ring-2 focus:ring-[#42A5FF] focus:ring-offset-2 transition-all duration-200 ml-auto disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {isSigningUp ? (<><LoadingSpinner /><span>Creating...</span></>) : (<><CheckIcon /><span>Create Account</span></>)}
@@ -640,7 +701,6 @@ const Auth = () => {
                     <button 
                       type="submit" 
                       disabled={isSendingReset} 
-                      // Updated Button BG and Hover/Focus
                       className={`w-full mt-6 ${BRAND_COLOR} text-white py-3 px-4 rounded-lg font-medium ${BRAND_HOVER_FOCUS} focus:outline-none focus:ring-2 focus:ring-offset-2 transform hover:scale-[1.02] transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center`}
                     >
                       {isSendingReset ? (<><LoadingSpinner /><span className="ml-2">Sending Link...</span></>) : 'Send Reset Link'}
@@ -650,14 +710,12 @@ const Auth = () => {
               </AnimatePresence>
             </div>
 
-            {/* Footer */}
             <div className="mt-6 text-center">
               <div className="space-y-2">
                 <button
                   type="button"
                   onClick={showForgotPassword ? () => {setShowForgotPassword(false); setIsLogin(true); resetForm();} : toggleMode}
                   disabled={isLoading || isSigningUp || isSendingReset}
-                  // Updated text color to Deep Blue Accent
                   className="text-[#0094FF] hover:text-[#002B66] font-medium text-sm underline focus:outline-none transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {showForgotPassword 
