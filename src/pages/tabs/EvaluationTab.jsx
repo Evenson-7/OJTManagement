@@ -1,3 +1,5 @@
+// fileName: EvaluationTab.jsx
+
 import React, { useState, useEffect } from "react";
 import { 
   collection, query, where, addDoc, updateDoc, doc, 
@@ -12,10 +14,19 @@ import EvaluationCertificate from '../../components/EvaluationCertificate';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro'; 
 
-import { HiOutlineXMark, HiOutlineArrowDownTray, HiOutlinePrinter } from "react-icons/hi2";
+import { HiOutlineXMark } from "react-icons/hi2";
 import { FaStar, FaMedal, FaCrown, FaFire, FaGem } from "react-icons/fa";
 import { BsGraphUpArrow } from "react-icons/bs";
 import { FileText, Award, BarChart2 } from "lucide-react";
+
+// --- COLOR PALETTE CONSTANTS ---
+const COLORS = {
+  primary: "text-[#42A5FF]", // Sky Blue
+  accent: "text-[#0094FF]",  // Deep Blue
+  navy: "text-[#002B66]",    // Navy Blue
+  bgLight: "bg-[#BDE4F7]",   // Light Cyan
+  bgNavy: "bg-[#002B66]",    // Navy Background
+};
 
 // --- CONSTANTS ---
 const ratingScale = [
@@ -123,16 +134,51 @@ const calculateAnalytics = (allEvaluations) => {
     return { performanceInsights: { totalEvaluations: submitted.length, averageScore: Number(avgOverall.toFixed(2)), latestScore: Number(latestScore.toFixed(2)), topPerformers: internPerformance.filter(i => i.averageScore >= 4.5).length }, internPerformance, strengths: globalStrengths, improvementAreas: globalWeaknesses };
 };
 
+// --- UPDATED DASHBOARD CARD COMPONENT ---
 const EvaluationDashboard = ({ stats, rankings }) => {
   const { totalEvaluations, averageScore } = stats.performanceInsights || { totalEvaluations: 0, averageScore: 0 };
   const topPerformerName = rankings.length > 0 ? rankings[0].internName : "N/A";
   const topPerformerDisplay = topPerformerName !== "N/A" ? topPerformerName.split(" ")[0] : "N/A";
   const topPerformerScore = rankings.length > 0 ? rankings[0].averageScore : 0;
+  
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
-      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between"><div><p className="text-sm font-medium text-gray-500 mb-1">Total Evaluations</p><h3 className="text-3xl font-bold text-gray-900">{totalEvaluations}</h3></div><div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-600"><FileText size={24} /></div></div>
-      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between"><div><p className="text-sm font-medium text-gray-500 mb-1">Class Average</p><h3 className="text-3xl font-bold text-gray-900">{averageScore}</h3></div><div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center text-green-600"><BarChart2 size={24} /></div></div>
-      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between"><div><p className="text-sm font-medium text-gray-500 mb-1">Top Performer</p><h3 className="text-xl font-bold text-gray-900">{topPerformerDisplay}</h3><p className="text-xs text-green-600 font-medium mt-1">{rankings.length > 0 ? `Avg Score: ${topPerformerScore}` : "No data"}</p></div><div className="w-12 h-12 bg-purple-50 rounded-full flex items-center justify-center text-purple-600"><Award size={24} /></div></div>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+      
+      {/* CARD 1: Total Evaluations (Light Blue) */}
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-500 mb-1">Total Evaluations</p>
+          <h3 className={`text-3xl font-bold ${COLORS.navy}`}>{totalEvaluations}</h3>
+        </div>
+        <div className={`w-12 h-12 ${COLORS.bgLight} rounded-full flex items-center justify-center ${COLORS.navy}`}>
+          <FileText size={24} />
+        </div>
+      </div>
+
+      {/* CARD 2: Class Average (Green -> Changed to Accent Blue/Navy mix for brand consistency) */}
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-500 mb-1">Class Average</p>
+          <h3 className={`text-3xl font-bold ${COLORS.navy}`}>{averageScore}</h3>
+        </div>
+        <div className={`w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center ${COLORS.accent}`}>
+          <BarChart2 size={24} />
+        </div>
+      </div>
+
+      {/* CARD 3: Top Performer (Purple -> Changed to Deep Navy for prominence) */}
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-500 mb-1">Top Performer</p>
+          <h3 className={`text-xl font-bold ${COLORS.navy}`}>{topPerformerDisplay}</h3>
+          <p className={`text-xs ${COLORS.accent} font-medium mt-1`}>
+            {rankings.length > 0 ? `Avg Score: ${topPerformerScore}` : "No data"}
+          </p>
+        </div>
+        <div className={`w-12 h-12 ${COLORS.bgNavy} rounded-full flex items-center justify-center text-white`}>
+          <Award size={24} />
+        </div>
+      </div>
     </div>
   );
 };
@@ -162,17 +208,13 @@ const EvaluationTab = ({ user }) => {
   const [internRankings, setInternRankings] = useState([]); 
   const [myBadges, setMyBadges] = useState([]);
 
-  // ============================================
-  // HANDLER GROUP 1: CERTIFICATE ONLY
-  // (Landscape, Fixed Dimensions)
-  // ============================================
+  // --- CERTIFICATE PRINT HANDLER ---
   const handleCertificatePrint = () => {
     const input = document.getElementById("certificate-visual");
     if (!input) return toast.error("Certificate not found");
 
     const printWindow = window.open('', '', 'width=1200,height=800');
     if (!printWindow) return toast.error("Pop-up blocked. Please allow pop-ups.");
-
     const content = input.outerHTML;
 
     printWindow.document.write(`
@@ -182,55 +224,41 @@ const EvaluationTab = ({ user }) => {
           <script src="https://cdn.tailwindcss.com"></script>
           <style>
             @page { size: landscape; margin: 0; }
-            body { 
-                margin: 0; padding: 0; display: flex; 
-                justify-content: center; align-items: center; 
-                height: 100vh; background-color: white; 
-                -webkit-print-color-adjust: exact; 
-            }
+            body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: white; -webkit-print-color-adjust: exact; }
             .hide-on-export { display: none !important; }
           </style>
         </head>
         <body>
           ${content}
-          <script>
-            setTimeout(() => { window.focus(); window.print(); window.close(); }, 800);
-          </script>
+          <script>setTimeout(() => { window.focus(); window.print(); window.close(); }, 800);</script>
         </body>
       </html>
     `);
     printWindow.document.close();
   };
 
+  // --- CERTIFICATE PDF HANDLER ---
   const handleCertificatePDF = (elementId = "certificate-visual", filename = "Certificate") => {
     const input = document.getElementById(elementId);
     if (!input) return toast.error("Certificate element not found");
     
     toast.loading("Generating Certificate PDF...", { id: "cert-pdf" });
-
     setTimeout(async () => {
         try {
-            const width = 1123;
-            const height = 794;
+            const width = 1123; const height = 794;
             const wrapper = document.createElement('div');
             wrapper.style.position = 'fixed'; wrapper.style.top = '-10000px'; wrapper.style.left = '-10000px';
             wrapper.style.width = `${width}px`; wrapper.style.height = `${height}px`; wrapper.style.zIndex = '-9999';
             
             const clone = input.cloneNode(true);
             clone.style.width = '100%'; clone.style.height = '100%'; clone.style.margin = '0'; clone.style.transform = 'none';
-            const placeholders = clone.querySelectorAll('.hide-on-export');
-            placeholders.forEach(el => el.style.display = 'none');
+            clone.querySelectorAll('.hide-on-export').forEach(el => el.style.display = 'none');
             
-            // Convert inputs to divs
-            const inputs = clone.querySelectorAll('input');
-            inputs.forEach(input => {
+            clone.querySelectorAll('input').forEach(input => {
                 const div = document.createElement('div');
-                div.textContent = input.value;
-                div.className = input.className;
-                div.style.cssText = input.style.cssText;
-                div.style.border = 'none'; div.style.outline = 'none'; div.style.caretColor = 'transparent';
+                div.textContent = input.value; div.className = input.className; div.style.cssText = input.style.cssText;
+                div.style.border = 'none'; div.style.outline = 'none';
                 if (input.className.includes('border-b')) div.style.borderBottom = input.style.borderBottom || '2px solid black';
-                if (input.className.includes('border-t')) div.style.borderTop = input.style.borderTop || '2px solid black';
                 input.parentNode.replaceChild(div, input);
             });
 
@@ -238,34 +266,23 @@ const EvaluationTab = ({ user }) => {
             document.body.appendChild(wrapper);
             await new Promise(resolve => setTimeout(resolve, 100));
 
-            const canvas = await html2canvas(clone, { scale: 2.5, width: width, height: height, windowWidth: width, windowHeight: height, backgroundColor: "#ffffff", useCORS: true });
+            const canvas = await html2canvas(clone, { scale: 2.5, width, height, windowWidth: width, windowHeight: height, backgroundColor: "#ffffff", useCORS: true });
             document.body.removeChild(wrapper);
-
             const imgData = canvas.toDataURL('image/png', 1.0);
             const pdf = new jsPDF('l', 'px', [width, height]);
             pdf.addImage(imgData, 'PNG', 0, 0, width, height, '', 'FAST');
             pdf.save(`${filename}.pdf`);
-            toast.dismiss("cert-pdf");
-            toast.success("Certificate Downloaded");
-        } catch (err) {
-            console.error(err);
-            toast.error("Failed to export Certificate");
-            toast.dismiss("cert-pdf");
-        }
+            toast.dismiss("cert-pdf"); toast.success("Certificate Downloaded");
+        } catch (err) { console.error(err); toast.error("Failed to export"); toast.dismiss("cert-pdf"); }
     }, 500);
   };
 
-  // ============================================
-  // HANDLER GROUP 2: REPORT EVALUATION ONLY
-  // (Portrait, A4, Smart Breaking, WITH TABLE MARGINS)
-  // ============================================
+  // --- REPORT PRINT HANDLER ---
   const handleReportPrint = (elementId) => {
     const input = document.getElementById(elementId);
     if (!input) return toast.error("Report content not found.");
-
     const printWindow = window.open('', '', 'width=1000,height=1200');
     if (!printWindow) return toast.error("Pop-up blocked.");
-
     const content = input.innerHTML;
 
     printWindow.document.write(`
@@ -275,91 +292,37 @@ const EvaluationTab = ({ user }) => {
           <script src="https://cdn.tailwindcss.com"></script>
           <style>
             @media print {
-              /* 1. HIDE DEFAULT BROWSER HEADERS/FOOTERS */
-              @page { 
-                size: A4 portrait; 
-                margin: 0; 
-              }
-              
-              body { 
-                margin: 0; 
-                padding: 0; 
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-                background-color: white;
-              }
-
-              /* 2. TABLE STRUCTURE TO FORCE MARGINS ON EVERY PAGE */
+              @page { size: A4 portrait; margin: 0; }
+              body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white; }
               table { width: 100%; border-collapse: collapse; }
-              
-              /* These repeat on every printed page */
-              thead { display: table-header-group; } 
-              tfoot { display: table-footer-group; }
-              
-              /* The spacer divs create the physical "margin" area */
-              .header-space { height: 20mm; } 
-              .footer-space { height: 20mm; }
-
-              /* Content Padding */
-              .report-content {
-                  padding-left: 20mm;
-                  padding-right: 20mm;
-                  width: 100%;
-              }
-
-              /* UI Cleanup */
+              thead { display: table-header-group; } tfoot { display: table-footer-group; }
+              .header-space, .footer-space { height: 20mm; }
+              .report-content { padding-left: 20mm; padding-right: 20mm; width: 100%; }
               button, .no-print { display: none !important; }
               .break-inside-avoid { page-break-inside: avoid; }
             }
           </style>
         </head>
         <body>
-          <table>
-            <thead>
-              <tr><td><div class="header-space">&nbsp;</div></td></tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="report-content">
-                  ${content}
-                </td>
-              </tr>
-            </tbody>
-            <tfoot>
-              <tr><td><div class="footer-space">&nbsp;</div></td></tr>
-            </tfoot>
-          </table>
-          
-          <script>
-            setTimeout(() => { window.focus(); window.print(); window.close(); }, 800);
-          </script>
+          <table><thead><tr><td><div class="header-space">&nbsp;</div></td></tr></thead><tbody><tr><td class="report-content">${content}</td></tr></tbody><tfoot><tr><td><div class="footer-space">&nbsp;</div></td></tr></tfoot></table>
+          <script>setTimeout(() => { window.focus(); window.print(); window.close(); }, 800);</script>
         </body>
       </html>
     `);
     printWindow.document.close();
   };
 
+  // --- REPORT PDF HANDLER ---
   const handleReportPDF = (elementId) => {
     const input = document.getElementById(elementId);
     if (!input) return toast.error("Report content not found.");
-
     toast.loading("Generating Report...", { id: "rep-pdf" });
 
     setTimeout(async () => {
         try {
-            const PDF_WIDTH_PX = 794; 
-            const MARGIN_TOP = 40;
-            const MARGIN_BOTTOM = 40;
-            const PAGE_HEIGHT_PX = 1123; 
-            const CONTENT_HEIGHT = PAGE_HEIGHT_PX - MARGIN_TOP - MARGIN_BOTTOM;
-
+            const PDF_WIDTH_PX = 794; const MARGIN_TOP = 40; const MARGIN_BOTTOM = 40; const PAGE_HEIGHT_PX = 1123; const CONTENT_HEIGHT = PAGE_HEIGHT_PX - MARGIN_TOP - MARGIN_BOTTOM;
             const clone = input.cloneNode(true);
-            clone.style.width = `${PDF_WIDTH_PX}px`;
-            
-            // Padding for PDF centering
-            clone.style.padding = '40px'; 
-            clone.style.boxSizing = 'border-box'; 
-            clone.style.background = 'white';
+            clone.style.width = `${PDF_WIDTH_PX}px`; clone.style.padding = '40px'; clone.style.boxSizing = 'border-box'; clone.style.background = 'white';
             clone.classList.remove("shadow-xl", "border", "rounded-xl", "mb-10");
 
             const wrapper = document.createElement('div');
@@ -369,52 +332,26 @@ const EvaluationTab = ({ user }) => {
 
             let potentialBreaks = Array.from(clone.querySelectorAll('.break-inside-avoid'));
             if(potentialBreaks.length === 0) potentialBreaks = Array.from(clone.children);
-
             let currentY = 0; 
-
             potentialBreaks.forEach((child) => {
                 const rect = child.getBoundingClientRect();
-                const childHeight = rect.height; 
-                
-                if (currentY + childHeight > CONTENT_HEIGHT) {
-                    const spaceLeft = CONTENT_HEIGHT - currentY;
-                    child.style.marginTop = `${spaceLeft + MARGIN_TOP}px`;
-                    currentY = childHeight; 
-                } else {
-                    currentY += childHeight;
-                }
+                if (currentY + rect.height > CONTENT_HEIGHT) { child.style.marginTop = `${(CONTENT_HEIGHT - currentY) + MARGIN_TOP}px`; currentY = rect.height; } else { currentY += rect.height; }
             });
 
             const canvas = await html2canvas(clone, { scale: 2, width: PDF_WIDTH_PX, windowWidth: PDF_WIDTH_PX, useCORS: true });
             document.body.removeChild(wrapper);
-
             const imgData = canvas.toDataURL('image/png');
             const pdf = new jsPDF('p', 'pt', 'a4');
-            const pdfPageWidth = pdf.internal.pageSize.getWidth();
-            const pdfPageHeight = pdf.internal.pageSize.getHeight();
+            const pdfPageWidth = pdf.internal.pageSize.getWidth(); const pdfPageHeight = pdf.internal.pageSize.getHeight();
             const totalImgHeight = (canvas.height * pdfPageWidth) / canvas.width;
-
-            let heightLeft = totalImgHeight;
-            let position = 0;
+            let heightLeft = totalImgHeight; let position = 0;
 
             pdf.addImage(imgData, 'PNG', 0, position, pdfPageWidth, totalImgHeight);
             heightLeft -= pdfPageHeight;
-
-            while (heightLeft > 0) {
-                position = heightLeft - totalImgHeight; 
-                pdf.addPage();
-                pdf.addImage(imgData, 'PNG', 0, position, pdfPageWidth, totalImgHeight);
-                heightLeft -= pdfPageHeight;
-            }
-
+            while (heightLeft > 0) { position = heightLeft - totalImgHeight; pdf.addPage(); pdf.addImage(imgData, 'PNG', 0, position, pdfPageWidth, totalImgHeight); heightLeft -= pdfPageHeight; }
             pdf.save("Evaluation_Report.pdf");
-            toast.dismiss("rep-pdf");
-            toast.success("PDF Downloaded");
-        } catch (err) {
-            console.error(err);
-            toast.error("Export failed");
-            toast.dismiss("rep-pdf");
-        }
+            toast.dismiss("rep-pdf"); toast.success("PDF Downloaded");
+        } catch (err) { console.error(err); toast.error("Export failed"); toast.dismiss("rep-pdf"); }
     }, 500);
   };
 
@@ -481,14 +418,14 @@ const EvaluationTab = ({ user }) => {
         if (formTemplate.essays && formTemplate.essays.length > 0) {
             for (const essay of formTemplate.essays) {
                 const answer = evaluationForm.essayQuestions?.[essay.id];
-                if (!answer || !answer.trim()) return toast.error("Please answer all essay questions before submitting.");
+                if (!answer || !answer.trim()) return toast.error("Please answer all essay questions.");
             }
         }
         if (!isEditMode) {
             const existingInternEvals = evaluations.filter(e => e.internId === evaluationForm.internId && (e.status === 'submitted' || e.status === 'completed'));
-            if (existingInternEvals.length >= 2) return toast.error("This intern already has 2 submitted evaluations (Midterm & Final). Cannot create more.");
+            if (existingInternEvals.length >= 2) return toast.error("This intern already has 2 submitted evaluations.");
             const duplicatePeriod = existingInternEvals.find(e => e.periodCovered?.trim().toLowerCase() === evaluationForm.periodCovered?.trim().toLowerCase());
-            if (duplicatePeriod) return toast.error(`A "${evaluationForm.periodCovered}" has already been submitted for this intern.`);
+            if (duplicatePeriod) return toast.error(`A "${evaluationForm.periodCovered}" has already been submitted.`);
         }
         if (formTemplate.sections.length === 0) return toast.error("Template is empty.");
         for (const sec of formTemplate.sections) {
@@ -500,48 +437,32 @@ const EvaluationTab = ({ user }) => {
     try {
       const overallScore = calculateOverallScore(evaluationForm, formTemplate.sections);
       const sectionScores = {};
-      formTemplate.sections.forEach(sec => {
-          sectionScores[sec.title] = calculateSectionScore(evaluationForm[sec.id]);
-      });
+      formTemplate.sections.forEach(sec => { sectionScores[sec.title] = calculateSectionScore(evaluationForm[sec.id]); });
       const dataToSave = {
         ...evaluationForm, status, overallScore, sectionScores, 
         savedTemplateSnapshot: formTemplate, supervisorId: user.uid, updatedAt: serverTimestamp()
       };
       if (status === "submitted") dataToSave.submittedAt = serverTimestamp();
-      if (isEditMode && editingEvaluation) {
-        await updateDoc(doc(db, "evaluations", editingEvaluation.id), dataToSave);
-      } else {
-        dataToSave.createdAt = serverTimestamp();
-        await addDoc(collection(db, "evaluations"), dataToSave);
-      }
+      if (isEditMode && editingEvaluation) { await updateDoc(doc(db, "evaluations", editingEvaluation.id), dataToSave); } 
+      else { dataToSave.createdAt = serverTimestamp(); await addDoc(collection(db, "evaluations"), dataToSave); }
       toast.success(`Evaluation ${status === 'draft' ? 'saved' : 'submitted'}!`);
       setActiveView("dashboard");
       setEvaluationForm({ internId: "", internName: "", periodCovered: "", status: "draft", essayQuestions: {}, supervisorName: user.name, evaluationDate: "" });
-      setEditingEvaluation(null);
-      setIsEditMode(false);
-    } catch (e) {
-      console.error(e);
-      toast.error("Error saving.");
-    } finally {
-      setEvaluationSubmitting(false);
-    }
+      setEditingEvaluation(null); setIsEditMode(false);
+    } catch (e) { console.error(e); toast.error("Error saving."); } finally { setEvaluationSubmitting(false); }
   };
 
   const handleEditEvaluation = (ev) => {
     if (ev.status === "submitted" && user.role !== 'supervisor') return handleViewEvaluation(ev);
     setEvaluationForm({ ...initialFormState, ...ev });
     if (ev.savedTemplateSnapshot) setFormTemplate(ev.savedTemplateSnapshot); 
-    setEditingEvaluation(ev);
-    setIsEditMode(true);
-    setActiveView("form");
+    setEditingEvaluation(ev); setIsEditMode(true); setActiveView("form");
   };
   
   const handleViewEvaluation = (ev) => {
     setEvaluationForm({ ...initialFormState, ...ev });
     if (ev.savedTemplateSnapshot) setFormTemplate(ev.savedTemplateSnapshot);
-    setEditingEvaluation(ev);
-    setIsEditMode(false);
-    setActiveView("form");
+    setEditingEvaluation(ev); setIsEditMode(false); setActiveView("form");
   };
   
   const handleViewCertificate = (ev) => {
@@ -552,28 +473,17 @@ const EvaluationTab = ({ user }) => {
   const resetForm = () => {
     setEvaluationForm(initialFormState);
     setFormTemplate({ title: "OJT Evaluation", sections: [], essays: [] });
-    setEditingEvaluation(null);
-    setIsEditMode(false);
+    setEditingEvaluation(null); setIsEditMode(false);
   };
   
   const initialFormState = { internId: "", internName: "", periodCovered: "", periodStartMonth: "", periodEndMonth: "", status: "draft", essayQuestions: {}, supervisorName: user?.name || "", evaluationDate: "" };
   const dashboardEvaluations = user.role === 'intern' ? evaluations.filter(e => e.internId === user.uid) : evaluations;
   
   const dataProps = { evaluations: dashboardEvaluations, allEvaluations: evaluations, myInterns, allInterns, internRankings, myBadges, performanceData, evaluationForm, loading, evaluationSubmitting, editingEvaluation, isEditMode, ratingScale, formTemplate, badgeDefinitions, calculateSectionScore };
-  
-  // --- UPDATED HANDLER PROPS ---
   const handlerProps = { 
     setActiveView, handleEditEvaluation, handleViewEvaluation, resetEvaluationForm: resetForm, 
-    handleSaveEvaluation, handleRatingChange, handleViewCertificate, 
-    
-    // MAPPING FUNCTIONS TO WHAT TAB SECTION EXPECTS
-    handlePrintEvaluation: handleReportPrint, 
-    handlePDF: handleReportPDF,             
-    
-    handleInternSelection: (uid) => { 
-        const i = myInterns.find(k => k.uid === uid); 
-        if(i) setEvaluationForm(p => ({...p, internId: uid, internName: (i.firstName ? `${i.firstName} ${i.lastName}` : i.name)})); 
-    }, 
+    handleSaveEvaluation, handleRatingChange, handleViewCertificate, handlePrintEvaluation: handleReportPrint, handlePDF: handleReportPDF,             
+    handleInternSelection: (uid) => { const i = myInterns.find(k => k.uid === uid); if(i) setEvaluationForm(p => ({...p, internId: uid, internName: (i.firstName ? `${i.firstName} ${i.lastName}` : i.name)})); }, 
     handleFormChange: (f, v) => setEvaluationForm(p => ({...p, [f]: v})), 
     handleEssayAnswerChange: (id, v) => setEvaluationForm(p => ({...p, essayQuestions: {...p.essayQuestions, [id]: v}})), 
     addSection, removeSection, updateSectionTitle, addQuestion, removeQuestion, updateQuestionText, addEssay, removeEssay, updateEssayText, loadStandardTemplate 
@@ -583,10 +493,10 @@ const EvaluationTab = ({ user }) => {
     <>
       <Toaster position="top-right" />
       
-      {/* --- CERTIFICATE MODAL --- */}
+      {/* --- CERTIFICATE MODAL (FIXED RESPONSIVENESS) --- */}
       {viewingCertificate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="bg-white rounded-xl shadow-2xl relative max-w-full overflow-hidden flex flex-col">
+          <div className="bg-white rounded-xl shadow-2xl relative w-full max-w-6xl max-h-[95vh] overflow-hidden flex flex-col">
             
             <button 
                 onClick={() => setViewingCertificate(null)} 
@@ -595,8 +505,9 @@ const EvaluationTab = ({ user }) => {
                 <HiOutlineXMark className="w-6 h-6" />
             </button>
             
-            <div className="bg-gray-200 p-8 overflow-auto flex justify-center items-center">
-                 <div id="cert-wrapper"> 
+            {/* Added overflow-auto to prevent clipping on small screens */}
+            <div className="bg-gray-200 p-4 md:p-8 overflow-auto flex justify-center items-center h-full">
+                 <div id="cert-wrapper" className="scale-75 md:scale-100 origin-center transition-transform"> 
                     <EvaluationCertificate 
                         user={user} 
                         evaluation={viewingCertificate.evaluation} 
@@ -604,16 +515,15 @@ const EvaluationTab = ({ user }) => {
                     />
                  </div>
             </div>
-            
-            {/* 🛑 DELETED: The redundant buttons block was here. Now removed. */}
           </div>
         </div>
       )}
 
-      <div className="p-6 bg-gray-50 min-h-full">
+      {/* --- MAIN CONTAINER (FIXED WIDTH) --- */}
+      <div className="w-full max-w-full space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
             <div>
-                <h1 className="text-3xl font-bold text-gray-900">Evaluations & Performance</h1>
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Evaluations & Performance</h1>
                 <p className="text-gray-600">Unified view for performance ratings and official rankings.</p>
             </div>
         </div>
