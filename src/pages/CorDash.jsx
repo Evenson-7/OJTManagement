@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
-import { db } from "../../firebaseConfig";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { db, auth } from "../../firebaseConfig"; // Added auth import
+import { collection, query, where, getDocs, doc, setDoc } from "firebase/firestore";
+import { createUserWithEmailAndPassword, getAuth, signOut } from "firebase/auth"; // Auth imports
+import { initializeApp, deleteApp } from "firebase/app"; // App imports for secondary instance
 import { Toaster, toast } from 'react-hot-toast';
-import { Clock, Menu, X, LogOut, User } from "lucide-react"; 
+import { Clock, Menu, X, LogOut, User, Plus, Loader } from "lucide-react"; 
 
 // Components
 import ProfileScreen from "../components/ProfileScreen";
@@ -57,6 +59,14 @@ function CorDash() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDept, setFilterDept] = useState("all");
 
+  // --- ADD SUPERVISOR STATE ---
+  const [isAddSupModalOpen, setIsAddSupModalOpen] = useState(false);
+  const [isCreatingSup, setIsCreatingSup] = useState(false);
+  const [supForm, setSupForm] = useState({
+    firstName: '', lastName: '', email: '', password: '', 
+    phoneNumber: '', companyName: '', department: '', position: ''
+  });
+
   useEffect(() => {
     const timerId = setInterval(() => {
       setCurrentTime(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }));
@@ -70,32 +80,97 @@ function CorDash() {
     }
   }, [user]);
 
+  // Fetch Data Function (Reusable)
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const usersRef = collection(db, "users");
+      
+      const supQuery = query(usersRef, where("role", "==", "supervisor"));
+      const supSnap = await getDocs(supQuery);
+      const supList = supSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setSupervisors(supList);
+
+      const internQuery = query(usersRef, where("role", "==", "intern")); 
+      const internSnap = await getDocs(internQuery); 
+      const internList = internSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setInterns(internList);
+
+      setStats({ supervisors: supSnap.size, interns: internSnap.size });
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      toast.error("Failed to load data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const usersRef = collection(db, "users");
-        
-        const supQuery = query(usersRef, where("role", "==", "supervisor"));
-        const supSnap = await getDocs(supQuery);
-        const supList = supSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setSupervisors(supList);
-
-        const internQuery = query(usersRef, where("role", "==", "intern")); 
-        const internSnap = await getDocs(internQuery); 
-        const internList = internSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setInterns(internList);
-
-        setStats({ supervisors: supSnap.size, interns: internSnap.size });
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        toast.error("Failed to load data");
-      } finally {
-        setLoading(false);
-      }
-    };
     if (user) fetchData();
   }, [user]);
+
+  // --- LOGIC: CREATE SUPERVISOR (Without Logging Out) ---
+  const handleCreateSupervisor = async (e) => {
+    e.preventDefault();
+    setIsCreatingSup(true);
+
+    try {
+        // 1. Initialize a "Secondary" App instance.
+        // This prevents the main auth instance (Coordinator) from being logged out.
+        const config = auth.app.options; // Get current config
+        const secondaryApp = initializeApp(config, "Secondary");
+        const secondaryAuth = getAuth(secondaryApp);
+
+        // 2. Create User in Firebase Auth using secondary instance
+        const userCredential = await createUserWithEmailAndPassword(
+            secondaryAuth, 
+            supForm.email, 
+            supForm.password
+        );
+        const newSupUid = userCredential.user.uid;
+
+        // 3. Create User Document in Firestore (Using MAIN db instance)
+        await setDoc(doc(db, "users", newSupUid), {
+            uid: newSupUid,
+            firstName: supForm.firstName,
+            lastName: supForm.lastName,
+            email: supForm.email,
+            phoneNumber: supForm.phoneNumber,
+            companyName: supForm.companyName,
+            department: supForm.department, // Company Dept
+            position: supForm.position,
+            role: 'supervisor',
+            createdAt: new Date()
+        });
+
+        // 4. Cleanup: Sign out of secondary app and delete it
+        await signOut(secondaryAuth);
+        await deleteApp(secondaryApp);
+
+        toast.success("Supervisor account created successfully!");
+        
+        // 5. Reset form and refresh list
+        setSupForm({
+            firstName: '', lastName: '', email: '', password: '', 
+            phoneNumber: '', companyName: '', department: '', position: ''
+        });
+        setIsAddSupModalOpen(false);
+        fetchData(); // Refresh the list
+
+    } catch (error) {
+        console.error("Error creating supervisor:", error);
+        let msg = "Failed to create account.";
+        if (error.code === 'auth/email-already-in-use') msg = "Email is already in use.";
+        if (error.code === 'auth/weak-password') msg = "Password should be at least 6 characters.";
+        toast.error(msg);
+    } finally {
+        setIsCreatingSup(false);
+    }
+  };
+
+  const handleSupChange = (e) => {
+      setSupForm({ ...supForm, [e.target.name]: e.target.value });
+  };
 
   // Helpers
   const getSupervisorName = (id) => {
@@ -132,7 +207,7 @@ function CorDash() {
   };
 
   // --- REUSABLE HEADER COMPONENT ---
-  const FilterHeader = ({ title, showDeptFilter = true }) => (
+  const FilterHeader = ({ title, showDeptFilter = true, rightAction = null }) => (
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
       <h2 className="text-2xl font-bold text-gray-800">{title}</h2>
       
@@ -163,6 +238,9 @@ function CorDash() {
             </select>
           </div>
         )}
+
+        {/* Action Button Area */}
+        {rightAction}
       </div>
     </div>
   );
@@ -199,7 +277,19 @@ function CorDash() {
         const filteredSupervisors = supervisors.filter(s => (s.name || "").toLowerCase().includes(searchTerm.toLowerCase()) || (s.companyName || "").toLowerCase().includes(searchTerm.toLowerCase()));
         return (
           <div className="space-y-6 animate-fadeIn">
-            <FilterHeader title="All Supervisors" showDeptFilter={false} />
+            <FilterHeader 
+                title="All Supervisors" 
+                showDeptFilter={false}
+                rightAction={
+                    <button 
+                        onClick={() => setIsAddSupModalOpen(true)}
+                        className="flex items-center justify-center gap-2 bg-[#0094FF] hover:bg-[#007acc] text-white px-4 py-2 rounded-lg transition-colors font-medium shadow-sm"
+                    >
+                        <Plus className="w-5 h-5" />
+                        <span className="hidden sm:inline">Add Supervisor</span>
+                    </button>
+                }
+            />
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse min-w-[600px]">
@@ -242,7 +332,6 @@ function CorDash() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {displayedInterns.map((intern) => {
-                      // Logic to check if unassigned
                       const supervisorName = getSupervisorName(intern.supervisorId);
                       const isUnassigned = supervisorName === "Unassigned";
                       return (
@@ -250,12 +339,9 @@ function CorDash() {
                           <td className="px-6 py-4 font-medium text-gray-900">{intern.name || `${intern.firstName} ${intern.lastName}`}</td>
                           <td className="px-6 py-4 text-gray-600"><span className="bg-gray-100 text-gray-600 text-[10px] px-2 py-0.5 rounded-full border border-gray-200">{getCollegeName(intern.departmentId)}</span></td>
                           <td className="px-6 py-4 text-gray-600">{intern.course || 'N/A'}</td>
-                          
-                          {/* UPDATED: Red text if Unassigned */}
                           <td className={`px-6 py-4 font-medium ${isUnassigned ? 'text-red-500' : 'text-blue-600'}`}>
                             {supervisorName}
                           </td>
-                          
                           <td className="px-6 py-4"><span className="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">Active</span></td>
                         </tr>
                       );
@@ -383,12 +469,7 @@ function CorDash() {
           <div className={`md:hidden absolute top-full left-0 right-0 bg-white border-b border-gray-200 shadow-xl transition-all duration-300 origin-top ${isMobileMenuOpen ? 'scale-y-100 opacity-100' : 'scale-y-0 opacity-0 h-0 overflow-hidden'}`}>
             <div className="p-4 space-y-3">
               <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Account</div>
-              
-              {/* Profile Button */}
-              <button 
-                onClick={handleProfileClick}
-                className="flex items-center w-full p-3 rounded-lg hover:bg-gray-50 transition-colors border border-gray-100"
-              >
+              <button onClick={handleProfileClick} className="flex items-center w-full p-3 rounded-lg hover:bg-gray-50 transition-colors border border-gray-100">
                 <div className={`w-10 h-10 rounded-full ${LIGHT_ACCENT_BG} flex items-center justify-center flex-shrink-0`}>
                   <span className={`${ACCENT_TEXT} font-semibold`}>C</span>
                 </div>
@@ -397,14 +478,8 @@ function CorDash() {
                   <p className="text-xs text-gray-500 capitalize">Coordinator</p>
                 </div>
               </button>
-
-              {/* Logout Button */}
-              <button 
-                onClick={handleLogoutClick}
-                className="flex items-center w-full p-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors border border-transparent hover:border-red-100"
-              >
-                <LogOut size={20} />
-                <span className="ml-3 font-medium text-sm">Sign Out</span>
+              <button onClick={handleLogoutClick} className="flex items-center w-full p-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors border border-transparent hover:border-red-100">
+                <LogOut size={20} /><span className="ml-3 font-medium text-sm">Sign Out</span>
               </button>
             </div>
           </div>
@@ -418,6 +493,78 @@ function CorDash() {
       </div>
 
       {showProfile && <ProfileScreen user={user} onClose={() => setShowProfile(false)} onUpdateProfile={updateUserProfile} />}
+      
+      {/* --- ADD SUPERVISOR MODAL --- */}
+      {isAddSupModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden animate-fadeIn">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+              <h3 className="text-lg font-bold text-gray-800">Add New Supervisor</h3>
+              <button onClick={() => setIsAddSupModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-200 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Modal Body */}
+            <form onSubmit={handleCreateSupervisor} className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                  <input type="text" name="firstName" value={supForm.firstName} onChange={handleSupChange} required className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="John" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                  <input type="text" name="lastName" value={supForm.lastName} onChange={handleSupChange} required className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Doe" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input type="email" name="email" value={supForm.email} onChange={handleSupChange} required className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="john.doe@company.com" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                  <input type="tel" name="phoneNumber" value={supForm.phoneNumber} onChange={handleSupChange} required className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="09123456789" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
+                  <input type="text" name="companyName" value={supForm.companyName} onChange={handleSupChange} required className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Tech Solutions Inc." />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                  <input type="text" name="department" value={supForm.department} onChange={handleSupChange} required className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="IT Dept" />
+                </div>
+              </div>
+
+              <div className="mb-4">
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Position / Title</label>
+                 <input type="text" name="position" value={supForm.position} onChange={handleSupChange} required className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Senior Developer" />
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Initial Password</label>
+                <input type="password" name="password" value={supForm.password} onChange={handleSupChange} required minLength={6} className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="******" />
+                <p className="text-xs text-gray-500 mt-1">Supervisor can change this later.</p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                <button type="button" onClick={() => setIsAddSupModalOpen(false)} className="px-5 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium">Cancel</button>
+                <button type="submit" disabled={isCreatingSup} className="px-5 py-2 bg-[#0094FF] text-white rounded-lg hover:bg-[#007acc] transition-colors font-medium flex items-center disabled:opacity-50">
+                   {isCreatingSup && <Loader className="w-4 h-4 mr-2 animate-spin" />}
+                   {isCreatingSup ? 'Creating...' : 'Create Account'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showLogoutConfirm && (
         <div className="fixed inset-0 bg-black/50 bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-xl">

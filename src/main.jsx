@@ -9,7 +9,7 @@ import './index.css';
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
-      <AuthProvider> {/* <-- Wrap App here */}
+      <AuthProvider> 
         <App />
       </AuthProvider>
     </BrowserRouter>

@@ -14,7 +14,6 @@ const ICON_BG = 'bg-[#42A5FF]';
 const PROGRESS_BAR_GRADIENT = 'bg-gradient-to-r from-[#0094FF] to-[#42A5FF]';
 
 // --- ( DATA: COLLEGES & PROGRAMS ) ---
-// This matches the AdminDash IDs to ensure Coordinators see the right students.
 const COLLEGES = [
   { id: 'college_ccs', code: 'CCS', name: 'College of Computer Studies' },
   { id: 'college_cbe', code: 'CBE', name: 'College of Business Education' },
@@ -67,11 +66,6 @@ const OfficeIcon = () => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
   </svg>
 );
-const BriefcaseIcon = () => (
-  <svg className="w-5 h-5 text-[#0094FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-  </svg>
-);
 const EyeIcon = () => (
   <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -104,12 +98,6 @@ const InternHeaderIcon = () => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
   </svg>
 );
-const SupervisorHeaderIcon = () => (
-  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-  </svg>
-);
-// --- NEW ICON FOR DOWNLOAD ---
 const MobileIcon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -140,7 +128,6 @@ const ProgressBar = ({ currentStep, totalSteps }) => {
   );
 };
 
-// Generic Input Field
 const InputField = ({ name, value, onChange, placeholder, type = "text", icon, disabled, showToggle, onToggle }) => (
   <div className="relative">
     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -169,7 +156,6 @@ const InputField = ({ name, value, onChange, placeholder, type = "text", icon, d
   </div>
 );
 
-// New Select Field Component
 const SelectField = ({ name, value, onChange, options, placeholder, icon, disabled }) => (
   <div className="relative">
     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -190,7 +176,6 @@ const SelectField = ({ name, value, onChange, options, placeholder, icon, disabl
         </option>
       ))}
     </select>
-    {/* Custom Dropdown Arrow */}
     <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400">
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
     </div>
@@ -205,7 +190,6 @@ const Auth = () => {
   // Form modes
   const [isLogin, setIsLogin] = useState(true);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [isSupervisorMode, setIsSupervisorMode] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -216,24 +200,28 @@ const Auth = () => {
   const [isSigningUp, setIsSigningUp] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
   
-  // State
   const initialState = {
     email: '', password: '', confirmPassword: '',
     firstName: '', lastName: '', phoneNumber: '',
-    school: '', // This will serve as University Name
-    departmentId: '', // NEW: To link with College
-    course: '', // This will hold the Program Code
+    school: 'The Lewis College', // Automatically populated to bypass input
+    departmentId: '', 
+    course: '', 
     companyName: '',
-    department: '', // For Supervisor/Intern Company Dept
-    position: ''
+    department: '', 
   };
   const [formData, setFormData] = useState(initialState);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
     
-    // Logic: If Department changes, clear the course to prevent mismatches
+    // Intercept phone number to enforce numbers-only and 11-digit max length
+    if (name === 'phoneNumber') {
+      const numericValue = value.replace(/\D/g, '').slice(0, 11);
+      setFormData(prev => ({ ...prev, [name]: numericValue }));
+      return;
+    }
+
+    setFormData(prev => ({ ...prev, [name]: value }));
     if (name === 'departmentId') {
       setFormData(prev => ({ ...prev, course: '' }));
     }
@@ -242,18 +230,12 @@ const Auth = () => {
   const internSteps = [
     { title: 'Account Setup', icon: <LockIcon />, fields: ['email', 'password', 'confirmPassword'] },
     { title: 'Personal Information', icon: <UserIcon />, fields: ['firstName', 'lastName', 'phoneNumber'] },
-    { title: 'Educational Background', icon: <AcademicIcon />, fields: ['school', 'departmentId', 'course'] },
+    { title: 'Educational Background', icon: <AcademicIcon />, fields: ['departmentId', 'course'] }, // School removed from validation
     { title: 'Internship Details', icon: <OfficeIcon />, fields: ['companyName', 'department'] }
   ];
 
-  const supervisorSteps = [
-    { title: 'Account Setup', icon: <LockIcon />, fields: ['email', 'password', 'confirmPassword'] },
-    { title: 'Personal Information', icon: <UserIcon />, fields: ['firstName', 'lastName', 'phoneNumber'] },
-    { title: 'Professional Details', icon: <BriefcaseIcon />, fields: ['companyName', 'department', 'position'] }
-  ];
-
   const getCurrentSteps = () => {
-    return isSupervisorMode ? supervisorSteps : internSteps;
+    return internSteps;
   };
 
   const validateCurrentStep = () => {
@@ -273,6 +255,15 @@ const Auth = () => {
           return;
         }
       }
+
+      // Exact 11-digit validation for the phone number
+      if (currentStep === 1) {
+        if (formData.phoneNumber.length !== 11) {
+          setError('Phone number must be exactly 11 digits');
+          return;
+        }
+      }
+
       setError('');
       setCurrentStep(prev => Math.min(prev + 1, getCurrentSteps().length - 1));
     } else {
@@ -295,7 +286,7 @@ const Auth = () => {
     setIsLoading(true);
     try {
       await signInWithEmailAndPassword(auth, formData.email, formData.password);
-      toast.success('Successfully signed in!');
+      toast.success('Successfully logged in!');
       setTimeout(() => navigate('/dashboard'), 1000);
     } catch (error) {
       let errorMessage = 'Failed to sign in';
@@ -342,21 +333,13 @@ const Auth = () => {
         ...profileData,
         email: email,
         createdAt: new Date(),
-        role: isSupervisorMode ? 'supervisor' : 'intern'
+        role: 'intern' // STRICTLY ENFORCED
       };
       
-      // Clean up fields based on role
       delete userData.confirmPassword;
-      if (isSupervisorMode) {
-        delete userData.school;
-        delete userData.course;
-        delete userData.departmentId; // Supervisor uses 'department' text, not ID
-      } else {
-        delete userData.position;
-      }
       
       await setDoc(doc(db, 'users', user.uid), userData);
-      toast.success(`${isSupervisorMode ? 'Supervisor' : 'Intern'} account created successfully!`);
+      toast.success(`Intern account created successfully!`);
       setTimeout(() => navigate('/dashboard'), 1500);
     } catch (error) {
       let errorMessage = 'Failed to create account';
@@ -408,12 +391,6 @@ const Auth = () => {
   const toggleMode = () => {
     setIsLogin(!isLogin);
     setShowForgotPassword(false);
-    setIsSupervisorMode(false);
-    resetForm();
-  };
-
-  const toggleSupervisorMode = () => {
-    setIsSupervisorMode(!isSupervisorMode);
     resetForm();
   };
 
@@ -440,24 +417,17 @@ const Auth = () => {
           {/* Header */}
           <div className="text-center mb-8">
             <div className={`inline-flex items-center justify-center w-16 h-16 ${BRAND_COLOR} rounded-2xl mb-4 shadow-lg`}>
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={isSupervisorMode ? 'supervisor' : 'intern'}
-                  initial={{ opacity: 0, scale: 0.5 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.5 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  {isSupervisorMode ? <SupervisorHeaderIcon /> : <InternHeaderIcon />}
-                </motion.div>
-              </AnimatePresence>
+              <InternHeaderIcon />
             </div>
             <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
               OJT Management System
             </h1>
-            <p className="text-sm text-gray-600 mt-2">
-              {isSupervisorMode ? 'Supervisor Portal' : 'Student Portal'}
-            </p>
+            
+            <div className="flex flex-col items-center justify-center mt-2 space-y-2">
+               <p className="text-sm text-gray-500">
+                  {isLogin && !showForgotPassword ? 'Login to continue' : 'Create an account'}
+               </p>
+            </div>
           </div>
 
           <AnimatePresence>
@@ -469,36 +439,6 @@ const Auth = () => {
                 variants={containerVariants}
                 className="mb-6"
               >
-                {/* Account Type Toggle */}
-                <div className="mb-6">
-                  <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-lg">
-                    <button
-                      type="button"
-                      onClick={() => setIsSupervisorMode(false)}
-                      disabled={isSigningUp}
-                      className={`py-2 px-4 rounded-md text-sm font-medium transition-all duration-200 ${
-                        !isSupervisorMode
-                          ? 'bg-white text-[#0094FF] shadow-sm' 
-                          : 'text-gray-600 hover:text-gray-800'
-                      } ${isSigningUp ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      Intern
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleSupervisorMode()}
-                      disabled={isSigningUp}
-                      className={`py-2 px-4 rounded-md text-sm font-medium transition-all duration-200 ${
-                        isSupervisorMode
-                          ? 'bg-white text-[#0094FF] shadow-sm'
-                          : 'text-gray-600 hover:text-gray-800'
-                      } ${isSigningUp ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      Supervisor
-                    </button>
-                  </div>
-                </div>
-
                 <ProgressBar 
                   currentStep={currentStep} 
                   totalSteps={getCurrentSteps().length}
@@ -564,7 +504,7 @@ const Auth = () => {
                       disabled={isLoading}
                       className={`w-full mt-6 ${BRAND_COLOR} text-white py-3 px-4 rounded-lg font-medium ${BRAND_HOVER_FOCUS} focus:outline-none focus:ring-2 focus:ring-offset-2 transform hover:scale-[1.02] transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center`}
                     >
-                      {isLoading ? (<><LoadingSpinner /><span className="ml-2">Signing In...</span></>) : 'Sign In'}
+                      {isLoading ? (<><LoadingSpinner /><span className="ml-2">Logging In...</span></>) : 'Log In'}
                     </button>
                   </motion.div>
                 )}
@@ -595,24 +535,13 @@ const Auth = () => {
                             <InputField name="firstName" value={formData.firstName} onChange={handleChange} placeholder="First name" icon={<></>} disabled={isSigningUp} />
                             <InputField name="lastName" value={formData.lastName} onChange={handleChange} placeholder="Last name" icon={<></>} disabled={isSigningUp} />
                           </div>
-                          <InputField name="phoneNumber" value={formData.phoneNumber} onChange={handleChange} placeholder="Phone number" type="tel" icon={<></>} disabled={isSigningUp} />
+                          <InputField name="phoneNumber" value={formData.phoneNumber} onChange={handleChange} placeholder="Phone number (11 Digits)" type="tel" icon={<></>} disabled={isSigningUp} />
                         </>
                       )}
 
-                      {/* Step 2: Intern vs Supervisor */}
-                      {!isSupervisorMode && currentStep === 2 && (
+                      {/* Step 2: Education (Intern Only) */}
+                      {currentStep === 2 && (
                         <>
-                          {/* UNIVERSITY NAME */}
-                          <InputField 
-                            name="school" 
-                            value={formData.school} 
-                            onChange={handleChange} 
-                            placeholder="University/School Name" 
-                            icon={<AcademicIcon />} 
-                            disabled={isSigningUp} 
-                          />
-
-                          {/* COLLEGE / DEPARTMENT DROPDOWN */}
                           <SelectField
                             name="departmentId"
                             value={formData.departmentId}
@@ -622,8 +551,6 @@ const Auth = () => {
                             icon={<AcademicIcon />}
                             disabled={isSigningUp}
                           />
-
-                          {/* COURSE DROPDOWN (Filtered by College) */}
                           <SelectField
                             name="course"
                             value={formData.course}
@@ -639,16 +566,8 @@ const Auth = () => {
                         </>
                       )}
 
-                      {isSupervisorMode && currentStep === 2 && (
-                        <>
-                          <InputField name="companyName" value={formData.companyName} onChange={handleChange} placeholder="Company name" icon={<OfficeIcon />} disabled={isSigningUp} />
-                          <InputField name="department" value={formData.department} onChange={handleChange} placeholder="Department" icon={<OfficeIcon />} disabled={isSigningUp} />
-                          <InputField name="position" value={formData.position} onChange={handleChange} placeholder="Position/Title" icon={<BriefcaseIcon />} disabled={isSigningUp} />
-                        </>
-                      )}
-
                       {/* Step 3: Intern (Company) */}
-                      {!isSupervisorMode && currentStep === 3 && (
+                      {currentStep === 3 && (
                          <>
                           <InputField name="companyName" value={formData.companyName} onChange={handleChange} placeholder="Company name" icon={<OfficeIcon />} disabled={isSigningUp} />
                           <InputField name="department" value={formData.department} onChange={handleChange} placeholder="Department (Intern)" icon={<OfficeIcon />} disabled={isSigningUp} />
@@ -716,28 +635,63 @@ const Auth = () => {
               </AnimatePresence>
             </div>
 
+            {/* --- FOOTER --- */}
             <div className="mt-6 text-center">
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={showForgotPassword ? () => {setShowForgotPassword(false); setIsLogin(true); resetForm();} : toggleMode}
-                  disabled={isLoading || isSigningUp || isSendingReset}
-                  className="text-[#0094FF] hover:text-[#002B66] font-medium text-sm underline focus:outline-none transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {showForgotPassword 
-                    ? 'Remember your password?' 
-                    : isLogin 
-                      ? "Don't have an account?" 
-                      : "Already have an account?"
-                  }
-                </button>
+              <div className="flex flex-col items-center space-y-2">
+                {isLogin && !showForgotPassword && (
+                  <button
+                    type="button"
+                    onClick={() => {setShowForgotPassword(true); setError('');}}
+                    disabled={isLoading}
+                    className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                  >
+                    Forgot your password?
+                  </button>
+                )}
+
+                <div className="text-sm text-gray-600 mt-2">
+                  {showForgotPassword ? (
+                    <span>
+                      Remembered your password?{' '}
+                      <button
+                        type="button"
+                        onClick={() => {setShowForgotPassword(false); setIsLogin(true); resetForm();}}
+                        className="font-bold text-[#0094FF] hover:underline focus:outline-none"
+                      >
+                        Log In here
+                      </button>
+                    </span>
+                  ) : isLogin ? (
+                    <span>
+                      Don't have an account?{' '}
+                      <button
+                        type="button"
+                        onClick={toggleMode}
+                        disabled={isLoading}
+                        className="font-bold text-[#0094FF] hover:underline focus:outline-none ml-1"
+                      >
+                        Create an Account
+                      </button>
+                    </span>
+                  ) : (
+                    <span>
+                      Already have an account?{' '}
+                      <button
+                        type="button"
+                        onClick={toggleMode}
+                        disabled={isSigningUp}
+                        className="font-bold text-[#0094FF] hover:underline focus:outline-none ml-1"
+                      >
+                        Log In here
+                      </button>
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* --- NEW DOWNLOAD APP SECTION --- */}
             <div className="mt-8 pt-6 border-t border-gray-100/60 flex flex-col items-center">
               <a
-                // ⚠️ REPLACE THE URL BELOW WITH YOUR ACTUAL GITHUB LINK
                 href="https://github.com/Evenson-7/OJTManagement/releases/download/v1-0/OJTManagement.apk" 
                 className="group flex items-center space-x-3 px-5 py-2.5 rounded-xl bg-gradient-to-br from-white to-gray-50 border border-gray-200 shadow-sm hover:shadow-md hover:border-[#42A5FF]/40 transition-all duration-300"
               >
@@ -753,7 +707,6 @@ const Auth = () => {
                   </span>
                 </div>
               </a>
-              {/* Helper Text for Unknown Sources */}
               <p className="text-[9px] text-gray-400 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 *Requires installation from unknown sources
               </p>

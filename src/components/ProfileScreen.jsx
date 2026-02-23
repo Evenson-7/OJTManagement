@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { doc, getDoc, setDoc } from "firebase/firestore"; // Changed updateDoc to setDoc
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import toast from "react-hot-toast";
 
@@ -74,7 +74,7 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
     companyName: "",
     department: "",     
     departmentId: "",   
-    school: "",
+    school: "The Lewis College",
     course: "",
     position: "",
     profileImage: ""
@@ -90,22 +90,41 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
     return () => { document.body.style.overflow = "unset"; };
   }, [user]);
 
+  // Dynamically load Cloudinary script 
+  useEffect(() => {
+    if (!window.cloudinary) {
+      const script = document.createElement("script");
+      script.src = "https://widget.cloudinary.com/v2.0/global/all.js";
+      script.async = true;
+      document.body.appendChild(script);
+    }
+  }, []);
+
   const loadProfileData = async () => {
     try {
-      // Safe check: If user.uid is missing, don't fetch (prevents 400 error)
       if (!user || !user.uid) return;
 
       const userDoc = await getDoc(doc(db, "users", user.uid));
       if (userDoc.exists()) {
         const data = userDoc.data();
+        
+        let fName = data.firstName || "";
+        let lName = data.lastName || "";
+        
+        if (!fName && !lName && data.name) {
+           const nameParts = data.name.split(' ');
+           fName = nameParts[0] || "";
+           lName = nameParts.slice(1).join(' ') || "";
+        }
+
         setProfileData({
-          firstName: data.firstName || user.displayName?.split(' ')[0] || "",
-          lastName: data.lastName || user.displayName?.split(' ')[1] || "",
+          firstName: fName,
+          lastName: lName,
           phoneNumber: data.phoneNumber || "",
-          companyName: data.companyName || "",
-          department: data.department || "",
+          companyName: data.companyName || "", // Maps to "pnp" for your intern
+          department: data.department || "",   // Maps to "opeys" for your intern
           departmentId: data.departmentId || "", 
-          school: data.school || "",
+          school: data.school || "The Lewis College",
           course: data.course || "",
           position: data.position || "",
           profileImage: data.profileImage || ""
@@ -113,7 +132,6 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
       }
     } catch (error) {
       console.error("Profile Load Error:", error);
-      // Don't show toast error here to avoid annoying user if doc is just missing
     } finally {
       setIsLoading(false);
     }
@@ -126,11 +144,15 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
 
   // --- 2. LOGIC HANDLERS ---
   const handleInputChange = (field, value) => {
+    // Force numbers only & max 11 for phone
+    if (field === 'phoneNumber') {
+      value = value.replace(/\D/g, '').slice(0, 11);
+    }
+
     setProfileData(prev => ({ ...prev, [field]: value }));
     if (errors[field]) setErrors(prev => ({ ...prev, [field]: undefined }));
   };
 
-  // Handle College Change (Logic from Sign Up)
   const handleCollegeChange = (e) => {
     const selectedId = e.target.value;
     const selectedCollege = COLLEGES.find(c => c.id === selectedId);
@@ -138,53 +160,93 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
     setProfileData(prev => ({
       ...prev,
       departmentId: selectedId,
-      department: selectedCollege ? selectedCollege.name : "", // Save readable name
-      course: "" // Reset course to prevent mismatch
+      // We don't overwrite `department` here anymore because `department` is for the Company, not the College Name.
+      course: "" 
     }));
   };
 
   const handleImageUpload = () => {
     setIsUploadingImage(true);
+    
     if (!window.cloudinary) {
-        toast.error("Upload service not ready. Try again.");
-        setIsUploadingImage(false);
-        return;
+      toast.error("Upload service not ready. Try again.");
+      setIsUploadingImage(false);
+      return;
     }
+
     const widget = window.cloudinary.createUploadWidget(
       {
         cloudName: CLOUDINARY_CLOUD_NAME,
         uploadPreset: CLOUDINARY_UPLOAD_PRESET,
         sources: ["local", "url", "camera"],
         multiple: false,
+        maxFileSize: 10000000, 
         cropping: true,
-        croppingAspectRatio: 1,
+        croppingAspectRatio: 1, 
         folder: "profile_images",
-        clientAllowedFormats: ["jpg", "png", "webp"],
-        theme: "minimal",
+        publicId: `profile_${user.uid}_${Date.now()}`,
+        resourceType: "image",
+        clientAllowedFormats: ["jpg", "jpeg", "png", "webp"],
+        theme: "white",
+        styles: {
+          palette: {
+            window: "#FFFFFF",
+            windowBorder: "#90A0B3",
+            tabIcon: "#0094FF",
+            menuIcons: "#5A616A",
+            textDark: "#000000",
+            textLight: "#FFFFFF",
+            link: "#0094FF",
+            action: "#0094FF",
+            inactiveTabIcon: "#002B66",
+            error: "#F44235",
+            inProgress: "#42A5FF",
+            complete: "#002B66",
+            sourceBg: "#E4EBF1",
+          },
+        },
       },
       (error, result) => {
         setIsUploadingImage(false);
-        if (!error && result && result.event === "success") {
+        if (error) {
+          console.error("Upload error:", error);
+          toast.error("Error uploading image. Please try again.");
+          return;
+        }
+
+        if (result && result.event === "success") {
           const imageUrl = result.info.secure_url;
-          setProfileData(prev => ({ ...prev, profileImage: imageUrl }));
-          toast.success("Photo updated!");
+          setProfileData((prev) => ({
+            ...prev,
+            profileImage: imageUrl,
+          }));
+          toast.success("Profile image uploaded successfully!");
         }
       }
     );
     widget.open();
   };
 
-  // --- 3. SAVE HANDLER (FIXES MISSING DOC ERROR) ---
+  // --- 3. SAVE HANDLER ---
   const handleSave = async () => {
     const newErrors = {};
     if (!profileData.firstName?.trim()) newErrors.firstName = "Required";
     if (!profileData.lastName?.trim()) newErrors.lastName = "Required";
-    if (!profileData.phoneNumber?.trim()) newErrors.phoneNumber = "Required";
+    
+    if (!profileData.phoneNumber?.trim()) {
+      newErrors.phoneNumber = "Required";
+    } else if (profileData.phoneNumber.length !== 11) {
+      newErrors.phoneNumber = "Must be exactly 11 digits";
+    }
 
     if (user.role === "intern") {
-      if (!profileData.school?.trim()) newErrors.school = "Required";
       if (!profileData.departmentId) newErrors.departmentId = "Required";
       if (!profileData.course) newErrors.course = "Required";
+      // Added validation for intern's company details
+      if (!profileData.companyName?.trim()) newErrors.companyName = "Required";
+      if (!profileData.department?.trim()) newErrors.department = "Required"; 
+    } else if (user.role === "coordinator") {
+      if (!profileData.departmentId) newErrors.departmentId = "Required";
     } else if (user.role === "supervisor") {
       if (!profileData.companyName?.trim()) newErrors.companyName = "Required";
       if (!profileData.department?.trim()) newErrors.department = "Required";
@@ -192,15 +254,17 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
     }
 
     setErrors(newErrors);
-    if (Object.keys(newErrors).length > 0) return;
+    if (Object.keys(newErrors).length > 0) {
+      toast.error("Please fill in all required fields correctly.");
+      return;
+    }
 
     setIsSaving(true);
     try {
       const userRef = doc(db, "users", user.uid);
-      // KEY FIX: Use setDoc with { merge: true } instead of updateDoc
-      // This creates the document if it's missing (fixing the "User document not found" error)
       await setDoc(userRef, {
         ...profileData,
+        name: `${profileData.firstName} ${profileData.lastName}`.trim(),
         updatedAt: new Date().toISOString()
       }, { merge: true });
       
@@ -246,7 +310,7 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
                   {profileData.profileImage ? (
                     <img src={profileData.profileImage} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
-                    <span className="text-5xl text-gray-300 font-bold">{profileData.firstName?.charAt(0)}</span>
+                    <span className="text-5xl text-gray-300 font-bold">{profileData.firstName?.charAt(0) || user.role.charAt(0).toUpperCase()}</span>
                   )}
                 </div>
                 <button 
@@ -255,7 +319,7 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
                   className="absolute bottom-2 right-2 p-3 bg-white text-gray-600 rounded-full shadow-lg hover:text-[#0094FF] transition-all transform hover:scale-110 border border-gray-100"
                   title="Upload Photo"
                 >
-                  <CameraIcon />
+                  {isUploadingImage ? <span className="animate-spin text-xs">...</span> : <CameraIcon />}
                 </button>
               </div>
               <div className="mt-5 text-center">
@@ -263,6 +327,10 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
                 <span className="inline-block mt-1 px-3 py-1 bg-blue-50 text-[#0094FF] text-xs font-bold uppercase tracking-wider rounded-full border border-blue-100">
                   {user.role}
                 </span>
+                
+                {user.role === 'intern' && (
+                  <p className="text-xs text-gray-400 mt-2 font-medium uppercase">{profileData.school}</p>
+                )}
               </div>
             </div>
 
@@ -280,33 +348,24 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
                     <input type="text" value={profileData.lastName} onChange={e => handleInputChange('lastName', e.target.value)} className={INPUT_STYLE} />
                   </InputGroup>
                 </div>
-                <InputGroup label="Phone Number" error={errors.phoneNumber}>
-                    <input type="tel" value={profileData.phoneNumber} onChange={e => handleInputChange('phoneNumber', e.target.value)} className={INPUT_STYLE} />
+                <InputGroup label="Phone Number (11 Digits)" error={errors.phoneNumber}>
+                    <input type="tel" value={profileData.phoneNumber} onChange={e => handleInputChange('phoneNumber', e.target.value)} className={INPUT_STYLE} placeholder="09xxxxxxxxx" />
                 </InputGroup>
               </div>
 
               {/* Role Specific Group */}
               <div className="space-y-4">
                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">
-                  {user.role === 'intern' ? 'Academic Details' : 'Professional Details'}
+                  {user.role === 'intern' ? 'Academic Details' : (user.role === 'coordinator' ? 'Coordinator Assignment' : 'Professional Details')}
                 </h4>
                 
-                {user.role === 'intern' ? (
-                  // --- INTERN FIELDS (New Logic) ---
-                  <div className="space-y-5">
-                     <InputGroup label="School / University" error={errors.school}>
-                      <input type="text" value={profileData.school} onChange={e => handleInputChange('school', e.target.value)} className={INPUT_STYLE} />
-                    </InputGroup>
-
+                {/* INTERN SECTION */}
+                {user.role === 'intern' && (
+                  <div className="space-y-6">
                     <div className="grid grid-cols-1 gap-5">
-                      {/* 1. College Dropdown */}
                       <InputGroup label="College Department" error={errors.departmentId}>
                         <div className="relative">
-                          <select 
-                            value={profileData.departmentId} 
-                            onChange={handleCollegeChange}
-                            className={`${INPUT_STYLE} appearance-none cursor-pointer`}
-                          >
+                          <select value={profileData.departmentId} onChange={handleCollegeChange} className={`${INPUT_STYLE} appearance-none cursor-pointer`}>
                             <option value="">Select College</option>
                             {COLLEGES.map(c => <option key={c.id} value={c.id}>({c.code}) {c.name}</option>)}
                           </select>
@@ -316,15 +375,9 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
                         </div>
                       </InputGroup>
 
-                      {/* 2. Program Dropdown (Dependent) */}
                       <InputGroup label="Program / Course" error={errors.course}>
-                         <div className="relative">
-                          <select 
-                            value={profileData.course} 
-                            onChange={e => handleInputChange('course', e.target.value)}
-                            disabled={!profileData.departmentId}
-                            className={`${INPUT_STYLE} appearance-none cursor-pointer disabled:bg-gray-100 disabled:text-gray-400`}
-                          >
+                          <div className="relative">
+                          <select value={profileData.course} onChange={e => handleInputChange('course', e.target.value)} disabled={!profileData.departmentId} className={`${INPUT_STYLE} appearance-none cursor-pointer disabled:bg-gray-100 disabled:text-gray-400`}>
                             <option value="">{profileData.departmentId ? "Select Program" : "Select College First"}</option>
                             {profileData.departmentId && PROGRAMS[profileData.departmentId]?.map(p => (
                               <option key={p.code} value={p.code}>{p.name}</option>
@@ -336,9 +389,41 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
                         </div>
                       </InputGroup>
                     </div>
+
+                    {/* Intern's Company Details */}
+                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4 mt-6">
+                      Internship Details
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <InputGroup label="Company Name" error={errors.companyName}>
+                        <input type="text" value={profileData.companyName} onChange={e => handleInputChange('companyName', e.target.value)} className={INPUT_STYLE} placeholder="Company Name" />
+                      </InputGroup>
+                      <InputGroup label="Internship Department" error={errors.department}>
+                        <input type="text" value={profileData.department} onChange={e => handleInputChange('department', e.target.value)} className={INPUT_STYLE} placeholder="Assigned Dept" />
+                      </InputGroup>
+                    </div>
                   </div>
-                ) : (
-                  // --- SUPERVISOR FIELDS ---
+                )}
+
+                {/* COORDINATOR SECTION */}
+                {user.role === 'coordinator' && (
+                  <div className="grid grid-cols-1 gap-5">
+                     <InputGroup label="Assigned College Department" error={errors.departmentId}>
+                      <div className="relative">
+                        <select value={profileData.departmentId} onChange={handleCollegeChange} className={`${INPUT_STYLE} appearance-none cursor-pointer`}>
+                          <option value="">Select Assigned College</option>
+                          {COLLEGES.map(c => <option key={c.id} value={c.id}>({c.code}) {c.name}</option>)}
+                        </select>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                        </div>
+                      </div>
+                    </InputGroup>
+                  </div>
+                )}
+
+                {/* SUPERVISOR SECTION */}
+                {user.role === 'supervisor' && (
                   <div className="space-y-5">
                     <InputGroup label="Company Name" error={errors.companyName}>
                       <input type="text" value={profileData.companyName} onChange={e => handleInputChange('companyName', e.target.value)} className={INPUT_STYLE} />
@@ -353,6 +438,11 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
                     </div>
                   </div>
                 )}
+
+                {user.role === 'admin' && (
+                  <p className="text-sm text-gray-500 italic">No additional professional details required for System Administrators.</p>
+                )}
+
               </div>
             </div>
           </div>
