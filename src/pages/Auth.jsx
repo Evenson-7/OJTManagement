@@ -139,7 +139,8 @@ const InputField = ({ name, value, onChange, placeholder, type = "text", icon, d
       value={value}
       onChange={onChange}
       disabled={disabled}
-      className={`block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${ACCENT_TEXT_BORDER} bg-white/50 backdrop-blur-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed`}
+      aria-label={placeholder}
+      className={`block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${ACCENT_TEXT_BORDER} bg-white/90 text-gray-900 placeholder-gray-600 backdrop-blur-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed`}
       placeholder={placeholder}
       required
     />
@@ -149,6 +150,8 @@ const InputField = ({ name, value, onChange, placeholder, type = "text", icon, d
         className="absolute inset-y-0 right-0 pr-3 flex items-center disabled:opacity-50"
         onClick={onToggle}
         disabled={disabled}
+        aria-label={type === 'password' ? "Show password" : "Hide password"}
+        title={type === 'password' ? "Show password" : "Hide password"}
       >
         {type === 'password' ? <EyeIcon /> : <EyeOffIcon />}
       </button>
@@ -166,7 +169,8 @@ const SelectField = ({ name, value, onChange, options, placeholder, icon, disabl
       value={value}
       onChange={onChange}
       disabled={disabled}
-      className={`block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${ACCENT_TEXT_BORDER} bg-white/50 backdrop-blur-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed appearance-none`}
+      aria-label={placeholder}
+      className={`block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${ACCENT_TEXT_BORDER} bg-white/90 text-gray-900 backdrop-blur-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed appearance-none`}
       required
     >
       <option value="" disabled>{placeholder}</option>
@@ -230,7 +234,7 @@ const Auth = () => {
   const internSteps = [
     { title: 'Account Setup', icon: <LockIcon />, fields: ['email', 'password', 'confirmPassword'] },
     { title: 'Personal Information', icon: <UserIcon />, fields: ['firstName', 'lastName', 'phoneNumber'] },
-    { title: 'Educational Background', icon: <AcademicIcon />, fields: ['departmentId', 'course'] }, // School removed from validation
+    { title: 'Educational Background', icon: <AcademicIcon />, fields: ['departmentId', 'course'] },
     { title: 'Internship Details', icon: <OfficeIcon />, fields: ['companyName', 'department'] }
   ];
 
@@ -401,7 +405,7 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <Toaster 
         position="top-right"
         toastOptions={{
@@ -643,7 +647,7 @@ const Auth = () => {
                     type="button"
                     onClick={() => {setShowForgotPassword(true); setError('');}}
                     disabled={isLoading}
-                    className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                    className="text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors"
                   >
                     Forgot your password?
                   </button>
@@ -656,7 +660,7 @@ const Auth = () => {
                       <button
                         type="button"
                         onClick={() => {setShowForgotPassword(false); setIsLogin(true); resetForm();}}
-                        className="font-bold text-[#0094FF] hover:underline focus:outline-none"
+                        className="font-bold text-[#005BB5] hover:underline focus:outline-none"
                       >
                         Log In here
                       </button>
@@ -668,7 +672,7 @@ const Auth = () => {
                         type="button"
                         onClick={toggleMode}
                         disabled={isLoading}
-                        className="font-bold text-[#0094FF] hover:underline focus:outline-none ml-1"
+                        className="font-bold text-[#005BB5] hover:underline focus:outline-none ml-1"
                       >
                         Create an Account
                       </button>
@@ -680,7 +684,7 @@ const Auth = () => {
                         type="button"
                         onClick={toggleMode}
                         disabled={isSigningUp}
-                        className="font-bold text-[#0094FF] hover:underline focus:outline-none ml-1"
+                        className="font-bold text-[#005BB5] hover:underline focus:outline-none ml-1"
                       >
                         Log In here
                       </button>
@@ -715,7 +719,7 @@ const Auth = () => {
           </form>
         </div>
       </div>
-    </div>
+    </main>
   );
 };
 
