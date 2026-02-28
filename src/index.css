@@ -1,9 +1,35 @@
 @import "tailwindcss";
 
-video, canvas {
-  image-rendering: auto;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  -webkit-transform-style: preserve-3d;
-  transform-style: preserve-3d;
+/* --- TAILWIND V4 THEME CONFIGURATION --- */
+@theme {
+  /* Brand Colors */
+  --color-brand-primary: #42A5FF;
+  --color-brand-dark: #1A8FFF;
+  --color-brand-light: #EBF5FF;
+  --color-brand-pastel: #BDE4F7;
+
+  /* Sidebar Colors */
+  --color-sidebar-bg: #F0F8FF;
+  --color-sidebar-border: #D6EEFF;
+  --color-sidebar-active: #BDE4F7;
+  --color-sidebar-text: #002B66;
+  --color-sidebar-muted: #5B9BD5;
+
+  /* Page Background */
+  --color-page-bg: #F5F9FF;
+
+  /* Status Colors */
+  --color-status-peach: #FFE4E6;
+  --color-status-mint-bg: #D1FAE5;
+  --color-status-mint-text: #065F46;
+
+  /* Fonts */
+  --font-dm-sans: 'DM Sans', sans-serif;
+}
+
+/* --- GLOBAL STYLES & OPTIMIZATIONS --- */
+@layer base {
+  body {
+    @apply font-dm-sans bg-page-bg text-sidebar-text antialiased;
+  }
 }

@@ -6,7 +6,7 @@ import { db } from "../../../firebaseConfig";
 import toast, { Toaster } from "react-hot-toast";
 import {
   FileText, Plus, Calendar, Search, Send, X, Loader2, Printer, 
-  TrendingUp, Users, Download, CheckSquare, Square, Clock, CheckCircle, Info
+  TrendingUp, Users, Download, CheckSquare, Square, Clock, Info
 } from "lucide-react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -166,7 +166,6 @@ const CreateReportModal = ({ form, setForm, handleSubmit, submitting, isOpen, on
     }
   };
 
-  // Calculate how many images are currently uploaded
   const uploadedCount = form.images.filter((i) => i).length;
 
   return (
@@ -215,7 +214,6 @@ const CreateReportModal = ({ form, setForm, handleSubmit, submitting, isOpen, on
           </div>
 
           <div>
-              {/* ⬇️ UPDATED LABEL */}
               <label className="block text-sm font-bold text-gray-700 mb-2">Evidence / Attachments (Attach 1-3 images)</label>
               <div className="flex gap-4 overflow-x-auto pb-2">
                 {[0, 1, 2].map((index) => (
@@ -227,7 +225,6 @@ const CreateReportModal = ({ form, setForm, handleSubmit, submitting, isOpen, on
           </div>
 
           <div className="pt-4 border-t border-gray-100">
-            {/* ⬇️ UPDATED VALIDATION LOGIC: Disabled only if count is 0 */}
             <button type="submit" disabled={submitting || uploadedCount === 0} className="w-full py-3.5 bg-[#0094FF] text-white rounded-xl font-bold shadow-md shadow-blue-200 flex justify-center items-center disabled:opacity-50 hover:bg-[#002B66] hover:shadow-lg transition-all active:scale-[0.98]">
                 {submitting ? 'Submitting...' : <><Send className="w-5 h-5 mr-2" /> Submit Report</>}
             </button>
@@ -410,9 +407,11 @@ function ReportsTab({ user }) {
         <button onClick={() => setActiveTab("accomplishments")} className={`flex items-center space-x-2 px-4 py-2 rounded-md font-medium transition-colors whitespace-nowrap ${activeTab === "accomplishments" ? "bg-[#0094FF] text-white shadow" : "text-gray-600 hover:bg-gray-50"}`}>
             <FileText size={18} /> <span>Inbox & History</span>
         </button>
-        <button onClick={() => setActiveTab("status")} className={`flex items-center space-x-2 px-4 py-2 rounded-md font-medium transition-colors whitespace-nowrap ${activeTab === "status" ? "bg-[#0094FF] text-white shadow" : "text-gray-600 hover:bg-gray-50"}`}>
-            <CheckSquare size={18} /> <span>Submission Status</span>
-        </button>
+        {isManager && (
+            <button onClick={() => setActiveTab("status")} className={`flex items-center space-x-2 px-4 py-2 rounded-md font-medium transition-colors whitespace-nowrap ${activeTab === "status" ? "bg-[#0094FF] text-white shadow" : "text-gray-600 hover:bg-gray-50"}`}>
+                <CheckSquare size={18} /> <span>Submission Status</span>
+            </button>
+        )}
         <button onClick={() => setActiveTab("attendance")} className={`flex items-center space-x-2 px-4 py-2 rounded-md font-medium transition-colors whitespace-nowrap ${activeTab === "attendance" ? "bg-[#0094FF] text-white shadow" : "text-gray-600 hover:bg-gray-50"}`}>
             <Calendar size={18} /> <span>Attendance DTR</span>
         </button>
@@ -564,8 +563,6 @@ function ReportsTab({ user }) {
                                             {selectedReportIds.includes(report.id) ? <CheckSquare className="text-[#0094FF]" size={22} /> : <Square size={22} />}
                                         </button>
                                     )}
-
-                                    <div className="p-3 rounded-lg bg-green-100 text-green-600 shrink-0"><CheckCircle className="w-6 h-6"/></div>
                                     
                                     <div className="flex-1 min-w-0 cursor-pointer" onClick={() => canSelect ? toggleReportSelection(report.id) : setViewingReport(report)}>
                                         <h4 className="font-bold text-gray-900 truncate pr-4">{report.title}</h4>

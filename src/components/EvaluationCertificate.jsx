@@ -18,9 +18,10 @@ const EvaluationCertificate = ({ user, evaluation, intern }) => {
     // Refs for hidden file inputs
     const leftLogoInputRef = useRef(null);
     const rightLogoInputRef = useRef(null);
+    const signatureInputRef = useRef(null); // ADDED SIGNATURE REF
 
     const [certData, setCertData] = useState({
-        leftLogo: "", rightLogo: "", 
+        leftLogo: "", rightLogo: "", signatureImage: "", // ADDED SIGNATURE STATE
         schoolName: "YOUR UNIVERSITY NAME",
         schoolAddress: "123 University Avenue, City, Country",
         title: "CERTIFICATE OF COMPLETION", subTitle: "This certificate is proudly awarded to",
@@ -50,31 +51,29 @@ const EvaluationCertificate = ({ user, evaluation, intern }) => {
 
     const handleChange = (field, value) => { if (!isEditing) return; setCertData(prev => ({ ...prev, [field]: value })); };
 
-    // --- UPDATED: FILE UPLOAD HANDLERS (Limit increased to 5MB) ---
     const handleLogoClick = (side) => {
         if (!isEditing) return;
         if (side === 'leftLogo' && leftLogoInputRef.current) leftLogoInputRef.current.click();
         if (side === 'rightLogo' && rightLogoInputRef.current) rightLogoInputRef.current.click();
+        if (side === 'signatureImage' && signatureInputRef.current) signatureInputRef.current.click(); // TRIGGER SIGNATURE UPLOAD
     };
 
     const handleFileChange = (event, side) => {
         const file = event.target.files[0];
         if (!file) return;
 
-        // SIZE CHECK: Increased to 5MB (5 * 1024 * 1024 bytes)
         if (file.size > 5242880) { 
-            toast.error("Image too large. Please use a logo under 5MB.");
+            toast.error("Image too large. Please use an image under 5MB.");
             return;
         }
 
         const reader = new FileReader();
         reader.onloadend = () => {
             handleChange(side, reader.result);
-            toast.success("Logo uploaded successfully!");
+            toast.success("Image uploaded successfully!");
         };
         reader.readAsDataURL(file);
     };
-    // ---------------------------------
 
     const saveCertificate = async (issueStatus) => {
         setIsSaving(true);
@@ -121,6 +120,7 @@ const EvaluationCertificate = ({ user, evaluation, intern }) => {
         <div className="flex flex-col items-center gap-4 py-4 w-full">
             <input type="file" ref={leftLogoInputRef} style={{ display: 'none' }} accept="image/*" onChange={(e) => handleFileChange(e, 'leftLogo')} />
             <input type="file" ref={rightLogoInputRef} style={{ display: 'none' }} accept="image/*" onChange={(e) => handleFileChange(e, 'rightLogo')} />
+            <input type="file" ref={signatureInputRef} style={{ display: 'none' }} accept="image/png, image/jpeg" onChange={(e) => handleFileChange(e, 'signatureImage')} />
             
             <div className="flex flex-col md:flex-row justify-between items-center w-full max-w-[1123px] gap-4 p-4 bg-white rounded-xl shadow-sm border border-gray-200">
                 <div className="flex items-center gap-3">
@@ -180,11 +180,21 @@ const EvaluationCertificate = ({ user, evaluation, intern }) => {
                             </div>
                         </div>
                         
-                        {/* --- UPDATED: SINGLE CENTERED SIGNATURE --- */}
-                        <div style={{ height: '100px', display: 'flex', justifyContent: 'center', alignItems: 'end' }}>
-                            <div className="text-center flex flex-col items-center w-80">
-                                <input readOnly={!isEditing} type="text" value={certData.sig1Name} onChange={(e) => handleChange('sig1Name', e.target.value)} className={`w-full font-bold text-xl text-center border-t-2 pt-2 bg-transparent focus:outline-none ${isEditing ? 'border-[#0094FF] hover:bg-blue-50/50' : 'border-black'}`} style={{ caretColor: '#000' }} />
-                                <input readOnly={!isEditing} type="text" value={certData.sig1Role} onChange={(e) => handleChange('sig1Role', e.target.value)} className={`w-full text-sm text-gray-500 italic text-center bg-transparent border-none focus:outline-none ${isEditing ? 'hover:bg-blue-50/50 rounded' : ''}`} style={{ caretColor: '#666' }} />
+                        <div style={{ height: '100px', display: 'flex', justifyContent: 'center', alignItems: 'end', position: 'relative' }}>
+                            <div className="text-center flex flex-col items-center w-80 relative">
+                                
+                                <div className="absolute bottom-[40px] z-20 cursor-pointer flex justify-center w-full" onClick={() => handleLogoClick('signatureImage')}>
+                                    {certData.signatureImage ? ( 
+                                        <img src={certData.signatureImage} alt="Signature" className="h-20 object-contain" /> 
+                                    ) : isEditing ? ( 
+                                        <div className="border-2 border-dashed border-gray-300 rounded h-16 w-64 flex flex-col items-center justify-center text-xs text-gray-400 hide-on-export hover:bg-gray-50 transition-colors bg-white/50 backdrop-blur-sm">
+                                            <HiOutlineCloudArrowUp className="w-5 h-5 mb-1"/> Upload E-Signature (PNG)
+                                        </div> 
+                                    ) : null}
+                                </div>
+
+                                <input readOnly={!isEditing} type="text" value={certData.sig1Name} onChange={(e) => handleChange('sig1Name', e.target.value)} className={`w-full font-bold text-xl text-center border-t-2 pt-2 bg-transparent focus:outline-none relative z-10 ${isEditing ? 'border-[#0094FF] hover:bg-blue-50/50' : 'border-black'}`} style={{ caretColor: '#000' }} />
+                                <input readOnly={!isEditing} type="text" value={certData.sig1Role} onChange={(e) => handleChange('sig1Role', e.target.value)} className={`w-full text-sm text-gray-500 italic text-center bg-transparent border-none focus:outline-none relative z-10 ${isEditing ? 'hover:bg-blue-50/50 rounded' : ''}`} style={{ caretColor: '#666' }} />
                             </div>
                         </div>
 

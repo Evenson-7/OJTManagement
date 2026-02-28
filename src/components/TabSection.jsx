@@ -9,13 +9,14 @@ import {
   HiOutlineExclamationTriangle, HiOutlineCheck, HiRocketLaunch, HiOutlineInformationCircle,
   HiOutlinePrinter, HiOutlineArrowDownTray, HiOutlineDocumentText,
   HiOutlineCheckCircle, HiOutlinePencilSquare, HiOutlineTrash, HiOutlinePlus,
-  HiOutlineUserGroup, HiOutlineCalculator
+  HiOutlineUserGroup, HiOutlineCalculator, HiOutlineCalendar, HiOutlineFunnel, HiOutlineArrowsUpDown, HiOutlineInboxArrowDown
 } from "react-icons/hi2";
 import { FaStar, FaMedal, FaCrown } from "react-icons/fa";
 
-const REPORT_ID = "printable-evaluation-content"; 
+import { doc, deleteDoc } from "firebase/firestore";
+import { db } from "../../firebaseConfig"; 
 
-const COLOR_HEX_MAP = { green: "#22c55e", blue: "#3b82f6", yellow: "#eab308", orange: "#f97316", red: "#ef4444" };
+import EvaluationForm from "./EvalFormat"; 
 
 const getLetterMetric = (score) => { if (score >= 4.5) return "E"; if (score >= 4.0) return "A"; if (score >= 3.0) return "S"; if (score >= 2.0) return "N"; return "P"; };
 
@@ -103,8 +104,8 @@ const InternRosterSection = ({ data, handlers, user }) => {
                             <th className="px-6 py-3 text-left text-xs font-bold uppercase text-gray-500">Intern Name</th>
                             <th className="px-6 py-3 text-left text-xs font-bold uppercase text-gray-500">Supervisor</th>
                             <th className="px-6 py-3 text-left text-xs font-bold uppercase text-gray-500">Evaluations</th>
-                            <th className="px-6 py-3 text-left text-xs font-bold uppercase text-gray-500">Official Grade</th>
                             {isCoordinator && <th className="px-6 py-3 text-left text-xs font-bold uppercase text-gray-500">Set Status</th>}
+                            <th className="px-6 py-3 text-left text-xs font-bold uppercase text-gray-500">Certificate</th>
                             {isCoordinator && <th className="px-6 py-3 text-left text-xs font-bold uppercase text-gray-500">Actions</th>}
                         </tr>
                     </thead>
@@ -113,6 +114,9 @@ const InternRosterSection = ({ data, handlers, user }) => {
                             const internEvals = data.allEvaluations.filter(e => e.internId === intern.uid && (e.status === 'submitted' || e.status === 'completed'));
                             const isComputing = activeComputeModal === intern.uid;
                             const assignedSup = data.supervisors?.find(s => s.uid === intern.supervisorId);
+                            const isFinished = intern.internshipStatus === "Finished";
+                            
+                            const latestEval = [...internEvals].sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0];
 
                             return (
                                 <React.Fragment key={intern.uid}>
@@ -134,22 +138,54 @@ const InternRosterSection = ({ data, handlers, user }) => {
                                             )}
                                         </td>
                                         <td className="px-6 py-4"><span className="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-1 rounded-full">{internEvals.length} Forms</span></td>
-                                        <td className="px-6 py-4">
-                                            {intern.officialFinalGrade ? <span className="text-[#0094FF] font-black text-lg">{intern.officialFinalGrade}</span> : <span className="text-gray-400 text-sm italic">Not computed</span>}
-                                        </td>
+                                        
                                         {isCoordinator && (
                                             <td className="px-6 py-4">
-                                                <select value={intern.internshipStatus || "Active"} onChange={(e) => handlers.handleChangeInternStatus(intern.uid, e.target.value)} className={`text-xs font-bold px-3 py-1.5 rounded outline-none cursor-pointer transition-colors shadow-sm border ${intern.internshipStatus === "Finished" ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-white"}`}>
+                                                <select 
+                                                    value={intern.internshipStatus || "Active"} 
+                                                    onChange={(e) => {
+                                                        const newStatus = e.target.value;
+                                                        if (newStatus === "Finished" && internEvals.length === 0) {
+                                                            toast.error("Cannot mark as Finished. Intern requires at least 1 evaluation.");
+                                                            return;
+                                                        }
+                                                        handlers.handleChangeInternStatus(intern.uid, newStatus);
+                                                    }} 
+                                                    className={`text-xs font-bold px-3 py-1.5 rounded outline-none cursor-pointer transition-colors shadow-sm border ${intern.internshipStatus === "Finished" ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-white"}`}
+                                                >
                                                     <option value="Active">Active (In Progress)</option>
                                                     <option value="Finished">Finished (Ready for Cert)</option>
                                                 </select>
                                             </td>
                                         )}
+                                        
+                                        <td className="px-6 py-4">
+                                            {isFinished ? (
+                                                latestEval ? (
+                                                    <button 
+                                                        onClick={() => handlers.handleViewCertificate(latestEval)}
+                                                        className="px-3 py-1.5 text-xs bg-yellow-500 text-white rounded-lg font-bold shadow hover:bg-yellow-600 transition-colors flex items-center gap-1.5"
+                                                    >
+                                                        <FaMedal /> {user.role === 'supervisor' ? "Manage Cert" : "View Cert"}
+                                                    </button>
+                                                ) : <span className="text-xs text-gray-400 italic">No Eval Records</span>
+                                            ) : (
+                                                <span className="text-xs text-gray-400 italic">Not Ready</span>
+                                            )}
+                                        </td>
+
                                         {isCoordinator && (
                                             <td className="px-6 py-4">
-                                                <button onClick={() => isComputing ? setActiveComputeModal(null) : openCalculator(intern.uid)} className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors ${isComputing ? "bg-red-100 text-red-600" : "bg-[#0094FF] text-white hover:bg-[#002B66]"}`}>
-                                                    <HiOutlineCalculator className="w-4 h-4" /> {isComputing ? "Close" : "Compute Average"}
-                                                </button>
+                                                <div className="flex flex-row items-center gap-3">
+                                                    <button onClick={() => isComputing ? setActiveComputeModal(null) : openCalculator(intern.uid)} className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-colors ${isComputing ? "bg-red-100 text-red-600" : "bg-[#0094FF] text-white hover:bg-[#002B66]"}`}>
+                                                        <HiOutlineCalculator className="w-4 h-4" /> {isComputing ? "Close" : "Compute Avg"}
+                                                    </button>
+                                                    {intern.officialFinalGrade && (
+                                                        <span className="text-xs font-black text-[#0094FF] bg-blue-50 px-2 py-1.5 rounded border border-blue-100 whitespace-nowrap">
+                                                            Grade: {intern.officialFinalGrade}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
                                         )}
                                     </tr>
@@ -221,109 +257,6 @@ const TemplateBuilder = ({ template, handlers }) => {
     );
 };
 
-const EvaluationForm = ({ data, handlers, user }) => {
-    const { formTemplate, evaluationForm, isEditMode, editingEvaluation } = data;
-    const isSubmitted = evaluationForm.status === "submitted" || evaluationForm.status === "completed";
-    const isReadOnly = isSubmitted && (!isEditMode || editingEvaluation);
-  
-    return (
-      <div className="max-w-4xl mx-auto animate-fadeIn">
-        <div className="flex justify-between items-center mb-6 no-print">
-          <button onClick={() => handlers.setActiveView("dashboard")} className="text-gray-500 hover:bg-gray-100 px-3 py-2 rounded">Back to Inbox</button>
-          <div className="flex items-center gap-2">
-            {isSubmitted && (
-                <>
-                    <button onClick={() => handlers.handlePDF(REPORT_ID)} className="px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 flex items-center gap-2 shadow-sm transition-colors text-sm font-medium"><HiOutlineArrowDownTray size={16} /> Export PDF</button>
-                    <button onClick={() => handlers.handlePrintEvaluation(REPORT_ID)} className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-black flex items-center gap-2 shadow-sm transition-colors text-sm font-medium"><HiOutlinePrinter size={16} /> Print</button>
-                </>
-            )}
-          </div>
-        </div>
-        
-        <div id={REPORT_ID} className="p-10 rounded-xl shadow-xl border border-gray-200 min-h-[800px] mb-10 bg-white text-gray-900 w-full mx-auto">
-          
-          <div className="text-center border-b-2 border-gray-800 pb-6 mb-8 pdf-block" style={{ borderColor: "#1f2937" }}>
-            <h1 className="text-2xl font-black uppercase text-[#002B66] tracking-wider">{formTemplate?.title || "Performance Evaluation"}</h1>
-            <p className="text-gray-500 mt-2 font-medium">Official Internship Program Document</p>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-6 p-6 rounded-lg mb-8 text-sm border border-gray-100 pdf-block" style={{ backgroundColor: "#f9fafb", borderColor: "#e5e7eb" }}>
-            <div><label className="block text-gray-400 font-bold uppercase text-xs mb-1">Intern Assigned</label><div className="font-bold text-lg text-gray-900 border-b border-gray-200 pb-1">{evaluationForm.internName}</div></div>
-            <div><label className="block text-gray-400 font-bold uppercase text-xs mb-1">Evaluation Phase</label><div className="font-bold text-gray-900 border-b border-gray-200 pb-1">{evaluationForm.evaluationType || "—"}</div></div>
-            <div><label className="block text-gray-400 font-bold uppercase text-xs mb-1">Overall Score</label><div className="font-bold text-lg text-[#0094FF]">{Number(evaluationForm.overallScore || 0).toFixed(2)} / 5.00</div></div>
-          </div>
-
-          {!formTemplate || formTemplate.sections?.length === 0 ? <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-lg"><p className="text-gray-400">Template payload is missing.</p></div> : 
-            <div className="space-y-8">
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs pdf-block">
-                  <div className="flex items-center gap-1 font-bold text-gray-500 uppercase tracking-widest mr-2"><HiOutlineInformationCircle className="w-4 h-4"/> Rating Guide:</div>
-                  {data.ratingScale.map((s) => (<div key={s.value} className="flex items-center gap-1.5"><span className="flex items-center justify-center w-5 h-5 rounded-full text-white font-bold text-[10px]" style={{ backgroundColor: COLOR_HEX_MAP[s.color] }}>{s.value}</span><span className="text-gray-700 font-medium">= {s.label} ({s.range})</span></div>))}
-              </div>
-
-              {formTemplate.sections.map((section) => (
-              <div key={section.id} className="pb-6 pdf-block">
-                <div className="flex justify-between items-center text-white px-4 py-2 rounded mb-4" style={{ backgroundColor: "#002B66" }}><h3 className="font-bold">{section.title}</h3><span className="text-xs bg-white/20 px-2 py-0.5 rounded">Avg: {data.calculateSectionScore(evaluationForm[section.id]).toFixed(2)}</span></div>
-                <div className="space-y-1">{section.items.map((item, idx) => (
-                  <div key={item.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-2 border-b border-gray-100 px-2" style={{ borderColor: "#f3f4f6" }}>
-                    <div className="w-full sm:w-2/3 text-sm text-gray-800 mb-2 sm:mb-0"><span className="font-bold text-gray-400 mr-2">{idx+1}.</span> {item.text}</div>
-                    <div className="flex gap-1 self-end sm:self-auto">
-                      {data.ratingScale.map((scale) => { 
-                        const isChecked = String((evaluationForm[section.id]||{})[item.id]) === String(scale.value); 
-                        const activeColor = COLOR_HEX_MAP[scale.color] || "#2563eb"; 
-                        return (
-                          <label key={scale.value} className="cursor-pointer">
-                            <input type="radio" name={`${section.id}_${item.id}`} value={scale.value} checked={isChecked} onChange={()=>handlers.handleRatingChange(section.id, item.id, scale.value)} disabled={isReadOnly} className="hidden" />
-                            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border transition-colors" style={{ backgroundColor: isChecked ? activeColor : "#ffffff", color: isChecked ? "#ffffff" : "#9ca3af", borderColor: isChecked ? activeColor : "#e5e7eb" }}>{scale.value}</div>
-                          </label>
-                        ); 
-                      })}
-                    </div>
-                  </div>
-                ))}</div>
-              </div>
-            ))}</div>
-          }
-
-          {formTemplate?.essays?.length > 0 && (
-          <div className="mt-8 pb-4 pdf-block">
-              <h3 className="font-bold px-4 py-2 rounded mb-4 uppercase text-sm tracking-wide" style={{ backgroundColor: "#f3f4f6", color: "#374151" }}>Feedback</h3>
-              <div className="space-y-6">
-                  {formTemplate.essays.map(essay => (
-                      <div key={essay.id}>
-                          <label className="block text-gray-800 font-bold text-sm mb-2">{essay.question}</label>
-                          {isReadOnly ? (
-                              <div className="w-full border border-gray-200 rounded p-3 text-sm bg-gray-50 whitespace-pre-wrap" style={{ borderColor: "#e5e7eb", color: "#111827", minHeight: "80px" }}>
-                                  {(evaluationForm.essayQuestions||{})[essay.id] || "No response provided."}
-                              </div>
-                          ) : (
-                              <textarea value={(evaluationForm.essayQuestions||{})[essay.id] || ""} onChange={(e) => handlers.handleEssayAnswerChange(essay.id, e.target.value)} disabled={isReadOnly} className="w-full border border-gray-200 rounded p-3 text-sm outline-none resize-none focus:ring-2 focus:ring-[#0094FF]" style={{ backgroundColor: "#f9fafb", borderColor: "#e5e7eb", color: "#111827" }} rows={3} placeholder={essay.placeholder} />
-                          )}
-                      </div>
-                  ))}
-              </div>
-          </div>)}
-          
-          {/* --- FIXED PDF PADDING: Added pt-16 and pb-8 so html2canvas never cuts the bottom text --- */}
-          <div className="pdf-block w-full pt-16 pb-5" style={{ borderColor: "#d1d5db" }}>
-            <div className="w-full max-w-sm">
-                {!isReadOnly ? (
-                    <input type="text" value={evaluationForm.supervisorName} onChange={(e) => handlers.handleFormChange("supervisorName", e.target.value)} className="w-full border-b-2 border-black pb-1 outline-none font-bold text-lg bg-transparent focus:border-[#0094FF] transition-colors" placeholder="Type your Full Name to sign" />
-                ) : (
-                    <div className="relative">
-                        <div className="font-bold text-lg text-gray-900 px-1 pb-1">{evaluationForm.supervisorName || "_________________"}</div>
-                        <div className="w-full border-t-[1.5px] border-black"></div>
-                    </div>
-                )}
-                <div className="text-xs text-gray-500 mt-1.5 font-medium tracking-wide">Supervisor Signature</div>
-            </div>
-          </div>
-        </div>
-        
-        {!isReadOnly && <div className="flex justify-end gap-4 mt-8 pb-10 no-print"><button onClick={() => handlers.handleSaveEvaluation("draft")} className="px-6 py-3 border border-gray-300 bg-white rounded-lg hover:bg-gray-50 text-gray-700 font-medium shadow-sm transition-colors">Save Draft</button><button onClick={() => handlers.handleSaveEvaluation("submitted")} className="px-6 py-3 bg-[#0094FF] text-white rounded-lg hover:bg-[#002B66] shadow-lg font-bold transition-colors">Submit Evaluation</button></div>}
-      </div>
-    );
-};
-
 const RankingsSection = ({ internRankings, user }) => {
     const isIntern = user.role === 'intern';
 
@@ -385,29 +318,64 @@ const RankingsSection = ({ internRankings, user }) => {
     );
 };
   
-const BadgesSection = ({ myBadges, badgeDefinitions }) => (
-    <div className="space-y-8 animate-fadeIn">
-      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-        <h3 className="text-lg font-bold text-gray-900 mb-4 border-b pb-2">My Achievements</h3>
-        {myBadges.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {myBadges.map((badge) => (
-              <div key={badge.id} className={`bg-gradient-to-br ${badge.color} text-white rounded-xl p-4 shadow-lg transform hover:-translate-y-1 transition-transform relative overflow-hidden`}>
-                <div className="absolute top-0 right-0 p-2 opacity-20 text-6xl">{badge.icon}</div>
-                <div className="relative z-10"><div className="text-3xl bg-white/20 p-3 rounded-full w-fit mb-3 shadow-sm">{badge.icon}</div><h4 className="font-bold text-lg leading-tight mb-1">{badge.name}</h4><p className="text-xs opacity-90 leading-snug">{badge.description}</p><div className="mt-3 inline-block px-2 py-0.5 bg-white/30 rounded text-[10px] font-bold uppercase tracking-wider">Unlocked</div></div>
-              </div>
-            ))}
-          </div>
-        ) : <div className="text-center py-12 bg-gray-50 rounded-lg text-gray-400 italic border border-dashed border-gray-200">No badges earned yet. Complete evaluations to unlock!</div>}
-      </div>
-      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-        <h3 className="text-lg font-bold text-gray-900 mb-4 border-b pb-2">All Available Badges</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">{badgeDefinitions.map(b => (
-           <div key={b.id} className="p-4 rounded-xl border border-gray-200 bg-gray-50 hover:bg-white hover:shadow-md transition-all flex items-center gap-4"><div className="text-3xl text-gray-400 grayscale opacity-70">{b.icon}</div><div><h4 className="font-bold text-sm text-gray-700">{b.name}</h4><p className="text-xs text-gray-500">{b.description}</p></div></div>
-        ))}</div>
-      </div>
-    </div>
-);
+const BadgesSection = ({ data, handlers, user }) => {
+    const myBadges = data.myBadges || [];
+    const badgeDefinitions = data.badgeDefinitions || [];
+    
+    const myEvals = data.allEvaluations?.filter(e => e.internId === user.uid && (e.status === 'submitted' || e.status === 'completed')) || [];
+    const me = data.allInterns?.find(i => i.uid === user.uid);
+    const isFinished = me?.internshipStatus === "Finished";
+    const latestEval = [...myEvals].sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0];
+    
+    const hasIssuedCert = latestEval && latestEval.certificateIssued;
+
+    return (
+        <div className="space-y-8 animate-fadeIn">
+            
+            {user.role === 'intern' && isFinished && (
+                <div className={`rounded-xl p-6 shadow-sm border ${hasIssuedCert ? 'bg-gradient-to-r from-yellow-50 to-yellow-100 border-yellow-300' : 'bg-gray-50 border-gray-200'} flex flex-col md:flex-row justify-between items-center gap-4`}>
+                    <div className="flex items-center gap-4">
+                        <div className={`p-4 rounded-full ${hasIssuedCert ? 'bg-yellow-500 text-white shadow-lg' : 'bg-gray-200 text-gray-400'}`}>
+                            <FaMedal className="w-8 h-8" />
+                        </div>
+                        <div>
+                            <h3 className={`text-xl font-bold ${hasIssuedCert ? 'text-yellow-800' : 'text-gray-600'}`}>Certificate of Completion</h3>
+                            <p className={`text-sm mt-1 ${hasIssuedCert ? 'text-yellow-700' : 'text-gray-500'}`}>
+                                {hasIssuedCert ? "Congratulations! Your official OJT certificate has been issued." : "Your internship is marked as Finished. Waiting for your supervisor to issue the certificate."}
+                            </p>
+                        </div>
+                    </div>
+                    {hasIssuedCert && (
+                        <button onClick={() => handlers.handleViewCertificate(latestEval)} className="px-6 py-3 bg-yellow-500 text-white font-bold rounded-lg shadow-md hover:bg-yellow-600 transition-colors whitespace-nowrap active:scale-95 flex items-center gap-2">
+                            <HiOutlineArrowDownTray className="w-5 h-5"/> View & Download
+                        </button>
+                    )}
+                </div>
+            )}
+
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 border-b pb-2">My Achievements</h3>
+                {myBadges.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {myBadges.map((badge) => (
+                    <div key={badge.id} className={`bg-gradient-to-br ${badge.color} text-white rounded-xl p-4 shadow-lg transform hover:-translate-y-1 transition-transform relative overflow-hidden`}>
+                        <div className="absolute top-0 right-0 p-2 opacity-20 text-6xl">{badge.icon}</div>
+                        <div className="relative z-10"><div className="text-3xl bg-white/20 p-3 rounded-full w-fit mb-3 shadow-sm">{badge.icon}</div><h4 className="font-bold text-lg leading-tight mb-1">{badge.name}</h4><p className="text-xs opacity-90 leading-snug">{badge.description}</p><div className="mt-3 inline-block px-2 py-0.5 bg-white/30 rounded text-[10px] font-bold uppercase tracking-wider">Unlocked</div></div>
+                    </div>
+                    ))}
+                </div>
+                ) : <div className="text-center py-12 bg-gray-50 rounded-lg text-gray-400 italic border border-dashed border-gray-200">No badges earned yet. Complete evaluations to unlock!</div>}
+            </div>
+            
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 border-b pb-2">All Available Badges</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">{badgeDefinitions.map(b => (
+                <div key={b.id} className="p-4 rounded-xl border border-gray-200 bg-gray-50 hover:bg-white hover:shadow-md transition-all flex items-center gap-4"><div className="text-3xl text-gray-400 grayscale opacity-70">{b.icon}</div><div><h4 className="font-bold text-sm text-gray-700">{b.name}</h4><p className="text-xs text-gray-500">{b.description}</p></div></div>
+                ))}</div>
+            </div>
+        </div>
+    );
+};
 
 const PerformanceSection = ({ performanceData, internRankings, user }) => {
     const [selectedIntern, setSelectedIntern] = useState("all");
@@ -423,7 +391,10 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
   
     const avgScore = isGlobalView ? performanceData.performanceInsights?.averageScore : targetData.averageScore;
     const { strengths = [], improvementAreas = [], trend, trendValue } = targetData;
-    const latest = isGlobalView ? null : Number(targetData.latestScore || 0);
+    
+    const latestHist = targetData.history && targetData.history.length > 0 ? targetData.history[targetData.history.length - 1] : null;
+    const latest = isGlobalView ? null : (latestHist ? Number(latestHist.score) : 0);
+    
     const performanceStatus = getPerformanceStatus(avgScore || 0, trendValue || 0);
   
     return (
@@ -450,10 +421,14 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
                          const pStatus = getPerformanceStatus(intern.averageScore || 0, intern.trendValue || 0);
                          
                          return (
-                             <div key={intern.internId} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm flex flex-col hover:shadow-md transition-shadow">
-                                 <div className={`p-4 border-b ${pStatus.bg} flex justify-between items-center`}>
+                             <div 
+                                 key={intern.internId} 
+                                 onClick={() => setSelectedIntern(intern.internId)}
+                                 className="group bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm flex flex-col hover:shadow-xl hover:border-[#0094FF] transform hover:-translate-y-1 transition-all cursor-pointer"
+                             >
+                                 <div className={`p-4 border-b ${pStatus.bg} flex justify-between items-center group-hover:bg-opacity-80 transition-colors`}>
                                      <div>
-                                         <h3 className="font-bold text-lg text-gray-900">{intern.internName}</h3>
+                                         <h3 className="font-bold text-lg text-gray-900 group-hover:text-[#0094FF] transition-colors">{intern.internName}</h3>
                                          <div className="flex gap-2 items-center mt-1">
                                              <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-white ${pStatus.color} shadow-sm border ${pStatus.border} flex items-center gap-1`}>
                                                  {pStatus.label}
@@ -498,6 +473,9 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
                                          ) : <span className="text-xs text-gray-400 italic">No weak areas identified.</span>}
                                      </div>
                                  </div>
+                                 <div className="bg-gray-100 p-2.5 text-center text-[#0094FF] font-bold text-xs uppercase tracking-wider group-hover:bg-[#0094FF] group-hover:text-white transition-colors">
+                                     Click to View Detailed Analytics
+                                 </div>
                              </div>
                          );
                      })}
@@ -523,7 +501,7 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
                        <div className="flex items-baseline gap-2 mt-2"><p className="text-4xl font-black text-[#0094FF]">{avgScore?.toFixed(2)}</p><span className="text-xl font-bold text-gray-400">({getLetterMetric(avgScore || 0)})</span></div>
                     </div>
                     <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
-                       <p className="text-sm font-bold text-gray-500 uppercase">Latest Rating</p>
+                       <p className="text-sm font-bold text-gray-500 uppercase" title="Comparing this against the average shows if they are improving.">Latest Rating</p>
                        <div className="flex items-baseline gap-2 mt-2"><p className={`text-4xl font-black ${latest >= 4 ? 'text-green-600' : 'text-indigo-600'}`}>{latest?.toFixed(2) || "0.00"}</p><span className="text-xl font-bold text-gray-400">({getLetterMetric(latest || 0)})</span></div>
                     </div>
                     <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
@@ -534,9 +512,10 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
                        <div className="flex items-center gap-2 mt-2"><span className={`text-2xl font-black ${trend === 'Improving' ? 'text-green-500' : trend === 'Declining' ? 'text-red-500' : 'text-gray-400'}`}>{trend || (trendValue > 0 ? "Up" : "Stable")}</span>{trend === 'Improving' ? <HiArrowTrendingUp className="w-6 h-6 text-green-500"/> : <HiArrowTrendingDown className="w-6 h-6 text-red-500"/>}</div>
                     </div>
                  </div>
+                 
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-                       <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2 border-b pb-2"><FaStar className="text-yellow-500"/> Top Strengths</h3>
+                       <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2 border-b pb-2"><FaStar className="text-yellow-500"/> Overall Top Strengths</h3>
                        {strengths.length > 0 ? (
                          <div className="space-y-3">
                            {strengths.map((s, idx) => {
@@ -552,7 +531,7 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
                        ) : <div className="text-center py-8 text-gray-400 italic">No data yet.</div>}
                     </div>
                     <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-                       <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2 border-b pb-2"><HiOutlineChartBar className="text-red-500"/> Areas for Growth</h3>
+                       <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2 border-b pb-2"><HiOutlineChartBar className="text-red-500"/> Overall Areas for Growth</h3>
                        {improvementAreas.length > 0 ? (
                          <div className="space-y-3">
                            {improvementAreas.map((s, idx) => {
@@ -568,6 +547,66 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
                        ) : <div className="text-center py-8 text-gray-400 italic">No weak areas.</div>}
                     </div>
                  </div>
+
+                 {targetData.history && targetData.history.length > 0 && (
+                     <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm mt-6">
+                         <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2 border-b pb-2">
+                             <HiOutlineCalendar className="text-[#0094FF] w-5 h-5"/> Detailed Evaluation History (Pros & Cons)
+                         </h3>
+                         <div className="relative border-l-2 border-blue-100 ml-4 space-y-8 pb-4">
+                             {targetData.history.map((hist, idx) => (
+                                 <div key={idx} className="relative pl-8">
+                                     <div className="absolute -left-[9px] top-4 w-4 h-4 rounded-full bg-[#0094FF] border-[3px] border-white shadow-sm"></div>
+                                     
+                                     <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 shadow-sm w-full transition-shadow hover:shadow-md">
+                                         
+                                         <div className="flex justify-between items-center border-b border-gray-200 pb-4 mb-4">
+                                             <div>
+                                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Evaluation Phase</span>
+                                                <span className="font-black text-[#002B66] text-xl">{hist.date}</span>
+                                             </div>
+                                             <div className="text-right">
+                                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Overall Score</span>
+                                                <span className="font-black text-[#0094FF] text-2xl bg-blue-100/50 px-3 py-1 rounded-lg border border-blue-100">{Number(hist.score).toFixed(2)}</span>
+                                             </div>
+                                         </div>
+
+                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                             <div>
+                                                 <h4 className="text-xs font-bold uppercase text-gray-500 mb-3 flex items-center gap-1"><FaStar className="text-yellow-500"/> Noted Strengths</h4>
+                                                 {hist.strengths?.length > 0 ? (
+                                                     <div className="space-y-2">
+                                                         {hist.strengths.map((s, i) => (
+                                                             <div key={i} className="flex justify-between items-center text-sm bg-white border border-green-100 p-2.5 rounded-lg shadow-sm">
+                                                                 <span className="font-medium text-gray-700 truncate pr-2" title={s.section}>{s.section}</span>
+                                                                 <span className="font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded">{s.score}</span>
+                                                             </div>
+                                                         ))}
+                                                     </div>
+                                                 ) : <span className="text-xs text-gray-400 italic">No specific strengths noted.</span>}
+                                             </div>
+                                             
+                                             <div>
+                                                 <h4 className="text-xs font-bold uppercase text-gray-500 mb-3 flex items-center gap-1"><HiOutlineChartBar className="text-red-500"/> Areas for Growth</h4>
+                                                 {hist.improvementAreas?.length > 0 ? (
+                                                     <div className="space-y-2">
+                                                         {hist.improvementAreas.map((s, i) => (
+                                                             <div key={i} className="flex justify-between items-center text-sm bg-white border border-red-100 p-2.5 rounded-lg shadow-sm">
+                                                                 <span className="font-medium text-gray-700 truncate pr-2" title={s.section}>{s.section}</span>
+                                                                 <span className="font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">{s.score}</span>
+                                                             </div>
+                                                         ))}
+                                                     </div>
+                                                 ) : <span className="text-xs text-gray-400 italic">No weak areas identified.</span>}
+                                             </div>
+                                         </div>
+                                     </div>
+                                 </div>
+                             ))}
+                         </div>
+                     </div>
+                 )}
+                 
              </div>
          )}
       </div>
@@ -580,46 +619,119 @@ const DashboardView = ({ data, handlers, user }) => {
     const [viewMode, setViewMode] = useState('summary'); 
     const [searchTerm, setSearchTerm] = useState('');
     
+    const [filterPhase, setFilterPhase] = useState('All');
+    const [sortBy, setSortBy] = useState('dateDesc');
+    
     const pendingTasks = isSupervisor ? data.evaluations.filter(e => e.status === 'pending_supervisor') : [];
     const drafts = isSupervisor ? data.evaluations.filter(e => e.status === 'draft') : [];
     const recentSubmitted = data.evaluations.filter(e => e.status === 'submitted' || e.status === 'completed').slice(0, 5);
+
+    const coordinatorsPendingSentForms = isCoordinator ? data.allEvaluations.filter(e => e.status === 'pending_supervisor' && e.sentBy === user.uid) : [];
     
-    const allHistory = data.evaluations.filter(e => {
-        if (!searchTerm) return true;
-        const searchLower = searchTerm.toLowerCase();
-        return (e.internName?.toLowerCase().includes(searchLower) || e.status?.toLowerCase().includes(searchLower));
+    let filteredHistory = data.evaluations.filter(e => {
+        const matchesSearch = !searchTerm || e.internName?.toLowerCase().includes(searchTerm.toLowerCase()) || e.status?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesPhase = filterPhase === 'All' || e.evaluationType === filterPhase;
+        
+        let matchesStatus = true;
+        if (isSupervisor) {
+            matchesStatus = e.status === 'submitted' || e.status === 'completed';
+        }
+        
+        return matchesSearch && matchesPhase && matchesStatus;
     });
+
+    filteredHistory.sort((a, b) => {
+        if (sortBy === 'scoreDesc') return (b.overallScore || 0) - (a.overallScore || 0);
+        if (sortBy === 'scoreAsc') return (a.overallScore || 0) - (b.overallScore || 0);
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        return sortBy === 'dateAsc' ? timeA - timeB : timeB - timeA;
+    });
+
+    const handleRecallPending = async (evalId) => {
+        if (!window.confirm("Recall this evaluation assignment? The Supervisor will no longer be able to access it, and this record will be deleted.")) return;
+        try {
+            await deleteDoc(doc(db, "evaluations", evalId));
+            toast.success("Active evaluation assignment recalled and deleted.");
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to recall evaluation.");
+        }
+    };
   
     if (viewMode === 'history') {
         return (
             <div className="space-y-6 animate-fadeIn">
-                <div className="flex items-center gap-4 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
-                    <button onClick={() => setViewMode('summary')} className="text-gray-500 hover:bg-gray-100 px-3 py-2 rounded font-medium transition-colors">← Back</button>
-                    <div className="flex-1 relative">
+                <div className="flex flex-col md:flex-row items-center gap-4 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <button onClick={() => setViewMode('summary')} className="text-gray-500 hover:bg-gray-100 px-3 py-2 rounded font-medium transition-colors whitespace-nowrap">← Back</button>
+                    <div className="flex-1 relative w-full">
                         <HiOutlineMagnifyingGlass className="absolute left-3 top-3 text-[#0094FF] w-5 h-5"/>
                         <input type="text" placeholder="Search evaluation history..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg outline-none focus:border-[#0094FF] focus:ring-1 focus:ring-[#0094FF] transition-all"/>
                     </div>
+                    <div className="flex gap-2 w-full md:w-auto">
+                        <div className="relative flex-1 md:flex-none">
+                            <HiOutlineFunnel className="absolute left-2.5 top-3 text-gray-400 w-4 h-4"/>
+                            <select value={filterPhase} onChange={(e) => setFilterPhase(e.target.value)} className="w-full pl-8 pr-4 py-2 border border-gray-200 rounded-lg outline-none focus:border-[#0094FF] cursor-pointer text-sm font-medium">
+                                <option value="All">All Phases</option>
+                                <option value="Regular">Regular</option>
+                                <option value="Midterm">Midterm</option>
+                                <option value="Final">Final</option>
+                            </select>
+                        </div>
+                        <div className="relative flex-1 md:flex-none">
+                            <HiOutlineArrowsUpDown className="absolute left-2.5 top-3 text-gray-400 w-4 h-4"/>
+                            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-full pl-8 pr-4 py-2 border border-gray-200 rounded-lg outline-none focus:border-[#0094FF] cursor-pointer text-sm font-medium">
+                                <option value="dateDesc">Newest First</option>
+                                <option value="dateAsc">Oldest First</option>
+                                <option value="scoreDesc">Highest Score</option>
+                                <option value="scoreAsc">Lowest Score</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
+                
                 <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
                     <h3 className="text-lg font-bold text-[#002B66] mb-6">Full Evaluation History</h3>
                     <div className="space-y-3">
-                        {allHistory.map(ev => (
-                            <div key={ev.id} className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 rounded-lg hover:shadow-md transition-all bg-white border border-gray-100">
-                                <div className="flex items-center gap-4 mb-3 md:mb-0">
-                                    <div className={`p-3 rounded-lg ${ev.status === 'submitted' ? 'bg-green-100 text-green-600' : 'bg-yellow-100 text-yellow-600'}`}><HiOutlineArchiveBox className="w-6 h-6"/></div>
-                                    <div>
-                                        <h4 className="font-bold text-gray-900">{ev.evaluationType} for {ev.internName}</h4>
-                                        <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${ev.status === 'submitted' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{ev.status}</span><span>•</span><span className="font-medium text-gray-700">Score: {ev.overallScore ? Number(ev.overallScore).toFixed(2) : 'N/A'}</span>
+                        {filteredHistory.map(ev => {
+                            const internData = data.internRankings?.find(i => i.internId === ev.internId);
+                            const isFinished = internData?.internshipStatus === "Finished";
+                            
+                            const internEvals = data.allEvaluations.filter(e => e.internId === ev.internId && (e.status === 'submitted' || e.status === 'completed'));
+                            const hasFinal = internEvals.some(e => e.evaluationType === "Final");
+                            
+                            let isCertificateBearer = false;
+                            if (ev.evaluationType === "Final") {
+                                isCertificateBearer = true;
+                            } else if (ev.evaluationType === "Regular" && !hasFinal) {
+                                const latestRegular = internEvals.filter(e => e.evaluationType === "Regular").sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0];
+                                if (latestRegular && ev.id === latestRegular.id) isCertificateBearer = true;
+                            }
+
+                            return (
+                                <div key={ev.id} className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 rounded-lg hover:shadow-md transition-all bg-white border border-gray-100">
+                                    <div className="flex items-center gap-4 mb-3 md:mb-0">
+                                        <div className={`p-3 rounded-lg ${ev.status === 'submitted' ? 'bg-green-100 text-green-600' : 'bg-yellow-100 text-yellow-600'}`}><HiOutlineArchiveBox className="w-6 h-6"/></div>
+                                        <div>
+                                            <h4 className="font-bold text-gray-900">{ev.evaluationType} for {ev.internName}</h4>
+                                            <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${ev.status === 'submitted' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{ev.status}</span><span>•</span><span className="font-medium text-gray-700">Score: {ev.overallScore ? Number(ev.overallScore).toFixed(2) : 'N/A'}</span>
+                                            </div>
                                         </div>
                                     </div>
+                                    <div className="flex gap-2 w-full md:w-auto">
+                                        {isCertificateBearer && !isSupervisor && ev.certificateIssued && (
+                                            <button onClick={() => handlers.handleViewCertificate(ev)} className="px-4 py-2 text-sm bg-[#0094FF] text-white rounded-lg font-bold hover:bg-[#002B66] transition-colors shadow-sm flex items-center gap-2"><FaMedal /> View Cert</button>
+                                        )}
+
+                                        <button onClick={() => handlers.handleEditEvaluation(ev)} className="flex-1 md:flex-none px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-[#0094FF] hover:border-[#0094FF] font-medium transition-colors">
+                                            {ev.status === 'draft' || ev.status === 'pending_supervisor' ? 'Open Assignment' : 'View Details'}
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="flex gap-2 w-full md:w-auto">
-                                    <button onClick={() => handlers.handleEditEvaluation(ev)} className="flex-1 md:flex-none px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-[#0094FF] hover:border-[#0094FF] font-medium transition-colors">{ev.status === 'draft' || ev.status === 'pending_supervisor' ? 'Open Task' : 'View Details'}</button>
-                                </div>
-                            </div>
-                        ))}
-                        {allHistory.length === 0 && <div className="text-center py-8 text-gray-400 italic">No history found.</div>}
+                            );
+                        })}
+                        {filteredHistory.length === 0 && <div className="text-center py-8 text-gray-400 italic border border-dashed border-gray-200 rounded-lg">No history found matching your filters.</div>}
                     </div>
                 </div>
             </div>
@@ -634,16 +746,48 @@ const DashboardView = ({ data, handlers, user }) => {
                     <h3 className="text-lg font-bold text-[#002B66] mb-4 flex items-center gap-2">
                         <HiOutlinePencilSquare className="text-[#0094FF] w-6 h-6" /> Manage Custom Templates
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    
+                    {/* --- FIXED: REPLACED GRID WITH FLEX-WRAP FOR COMPACT SIZING --- */}
+                    <div className="flex flex-wrap gap-4">
                         {data.customTemplates.map(template => (
-                            <div key={template.id} className="border border-gray-200 bg-gray-50 rounded-lg p-4 flex flex-col justify-between hover:border-[#0094FF] transition-colors shadow-sm">
+                            <div key={template.id} className="w-full sm:w-[280px] border border-gray-200 bg-gray-50 rounded-lg p-4 flex flex-col justify-between hover:border-[#0094FF] transition-colors shadow-sm">
                                 <div>
                                     <h4 className="font-bold text-gray-900">{template.title}</h4>
                                     <p className="text-xs text-gray-500 mt-1">{template.sections?.length || 0} Grading Sections • {template.essays?.length || 0} Essays</p>
                                 </div>
                                 <div className="flex gap-2 mt-4 pt-3 border-t border-gray-200">
                                     <button onClick={() => handlers.handleEditTemplate(template)} className="flex-1 text-sm bg-white border border-[#0094FF] text-[#0094FF] py-1.5 rounded-lg font-medium hover:bg-blue-50 transition-colors">Edit</button>
-                                    <button onClick={() => handlers.handleDeleteTemplate(template.id)} className="px-3 text-sm bg-white border border-red-200 text-red-500 rounded-lg font-medium hover:bg-red-50 transition-colors"><HiOutlineTrash className="w-4 h-4" /></button>
+                                    <button onClick={() => handlers.handleDeleteTemplate(template.id)} className="flex-1 px-3 text-sm bg-white border border-red-200 text-red-500 rounded-lg font-medium hover:bg-red-50 transition-colors">Delete</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {isCoordinator && coordinatorsPendingSentForms.length > 0 && (
+                <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 shadow-sm relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-[#0094FF]"></div>
+                    <h3 className="text-lg font-bold text-[#002B66] mb-6 flex items-center gap-2">
+                        <HiOutlineInboxArrowDown className="text-[#0094FF] w-6 h-6" /> Pending Supervisor Action (Sent Forms Inbox)
+                    </h3>
+                    <div className="space-y-3">
+                        {coordinatorsPendingSentForms.map(task => (
+                            <div key={task.id} className="flex flex-col md:flex-row items-center justify-between p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:border-[#0094FF] transition-colors">
+                                <div className="flex items-center gap-4 w-full">
+                                    <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 text-[#0094FF]">
+                                        <HiOutlineArchiveBox className="w-6 h-6"/>
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-gray-900">{task.internName} ({task.evaluationType})</p>
+                                        <p className="text-xs text-gray-500">Sent to Supervisor {task.updatedAt?.seconds ? new Date(task.updatedAt.seconds * 1000).toLocaleDateString() : 'recently'} • Current Status: {task.status}</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 mt-4 md:mt-0 w-full md:w-auto">
+                                    {/* --- FIXED: REMOVED EDIT ASSIGNMENT, ENHANCED DELETE BUTTON WITH TEXT --- */}
+                                    <button onClick={() => handleRecallPending(task.id)} className="w-full md:w-auto px-4 py-2 text-sm bg-white border border-red-200 text-red-600 rounded-lg font-bold hover:bg-red-50 transition-colors flex items-center justify-center gap-2">
+                                        <HiOutlineTrash className="w-4 h-4" /> Unsent
+                                    </button>
                                 </div>
                             </div>
                         ))}
@@ -705,8 +849,7 @@ const DashboardView = ({ data, handlers, user }) => {
                     <div className="space-y-3">
                         {recentSubmitted.map(ev => {
                             const internData = data.internRankings?.find(i => i.internId === ev.internId);
-                            const isFinished = internData?.internshipStatus === "Finished";
-
+                            
                             const internEvals = data.allEvaluations.filter(e => 
                                 e.internId === ev.internId && 
                                 (e.status === 'submitted' || e.status === 'completed')
@@ -739,30 +882,7 @@ const DashboardView = ({ data, handlers, user }) => {
                                         </div>
                                     </div>
                                     <div className="flex gap-2 w-full md:w-auto">
-                                        
-                                        {isCertificateBearer && isSupervisor && (
-                                            <button 
-                                                disabled={!isFinished}
-                                                onClick={() => handlers.handleViewCertificate(ev)}
-                                                className={`px-4 py-2 text-sm rounded-lg font-bold transition-all shadow-sm flex items-center gap-2 ${
-                                                    isFinished 
-                                                    ? "bg-yellow-500 text-white hover:bg-yellow-600 active:scale-95" 
-                                                    : "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
-                                                }`}
-                                            >
-                                                {isFinished ? (
-                                                    <><FaMedal /> Manage Certificate</>
-                                                ) : (
-                                                    "Awaiting Coordinator"
-                                                )}
-                                            </button>
-                                        )}
-
-                                        {isCertificateBearer && !isSupervisor && ev.certificateIssued && (
-                                            <button onClick={() => handlers.handleViewCertificate(ev)} className="px-4 py-2 text-sm bg-[#0094FF] text-white rounded-lg font-bold hover:bg-[#002B66] transition-colors shadow-sm flex items-center gap-2"><FaMedal /> View Certificate</button>
-                                        )}
-
-                                        <button onClick={() => handlers.handleViewEvaluation(ev)} className="px-4 py-2 text-sm border border-gray-300 bg-white rounded-lg hover:bg-gray-50 hover:text-[#0094FF] hover:border-[#0094FF] font-medium transition-colors">View Details</button>
+                                        <button onClick={() => handlers.handleViewEvaluation(ev)} className="w-full px-4 py-2 text-sm border border-gray-300 bg-white rounded-lg hover:bg-gray-50 hover:text-[#0094FF] hover:border-[#0094FF] font-medium transition-colors">View Details</button>
                                     </div>
                                 </div>
                             );
@@ -778,7 +898,7 @@ const TabSection = ({ currentTab, data, user, handlers }) => {
   const isStaff = user?.role === 'supervisor' || user?.role === 'coordinator';
   const navItems = isStaff 
     ? [ { id: 'dashboard', label: 'Inbox & History', icon: <HiOutlineChartPie /> }, { id: 'roster', label: 'Intern Roster', icon: <HiOutlineUserGroup /> }, { id: 'rankings', label: 'Rankings', icon: <HiOutlineTrophy /> }, { id: 'performance', label: 'Analytics', icon: <HiOutlineChartBar /> } ] 
-    : [ { id: 'dashboard', label: 'My Reviews', icon: <HiOutlineStar /> }, { id: 'rankings', label: 'Rankings', icon: <HiOutlineTrophy /> }, { id: 'badges', label: 'Badges', icon: <HiOutlineCheckBadge /> }, { id: 'performance', label: 'Analytics', icon: <HiOutlineChartBar /> } ];
+    : [ { id: 'dashboard', label: 'My Reviews', icon: <HiOutlineStar /> }, { id: 'rankings', label: 'Rankings', icon: <HiOutlineTrophy /> }, { id: 'badges', label: 'Badges & Certs', icon: <HiOutlineCheckBadge /> }, { id: 'performance', label: 'Analytics', icon: <HiOutlineChartBar /> } ];
 
   if (currentTab === 'form') return <EvaluationForm data={data} handlers={handlers} user={user} />;
   if (currentTab === 'template_builder') return <TemplateBuilder template={data.formTemplate} handlers={handlers} />;
@@ -789,7 +909,7 @@ const TabSection = ({ currentTab, data, user, handlers }) => {
        {currentTab === 'dashboard' && <DashboardView data={data} handlers={handlers} user={user} />}
        {currentTab === 'roster' && <InternRosterSection data={data} handlers={handlers} user={user} />}
        {currentTab === 'rankings' && <RankingsSection internRankings={data.internRankings} user={user} />}
-       {currentTab === 'badges' && <BadgesSection myBadges={data.myBadges} badgeDefinitions={data.badgeDefinitions || []} />}
+       {currentTab === 'badges' && <BadgesSection data={data} handlers={handlers} user={user} />}
        {currentTab === 'performance' && <PerformanceSection performanceData={data.performanceData} internRankings={data.internRankings} user={user} />}
     </div>
   );

@@ -83,7 +83,18 @@ const calculateAnalytics = (allEvaluations, allInternsList) => {
       averageScore: finalAverage, 
       isComplete: isComplete, 
       evaluationsCompleted: iEvals.length, 
-      history: iEvals.map(e => ({ date: e.evaluationType, score: e.overallScore })), 
+      
+      // FIXED: WE NOW EXTRACT SPECIFIC STRENGTHS/WEAKNESSES FOR EVERY PAST FORM
+      history: iEvals.map(e => {
+          const specificStats = analyzeSections([e]); // Extract specific pros/cons for this exact evaluation record
+          return { 
+              date: e.evaluationType, 
+              score: e.overallScore,
+              strengths: specificStats.strengths,
+              improvementAreas: specificStats.improvementAreas
+          };
+      }), 
+      
       badgesEarned: badgeDefinitions.filter(b => b.criteria(i.evaluations)), 
       strengths: indStrengths, 
       improvementAreas: indWeaknesses 
@@ -112,7 +123,6 @@ const EvaluationDashboard = ({ stats, rankings, user }) => {
   const { averageScore } = stats.performanceInsights || { averageScore: 0 };
   const topPerformerData = rankings && rankings.length > 0 ? rankings[0] : null;
   
-  // FIX: Intern sees their specific form count instead of the whole department's count
   const myData = user.role === 'intern' ? rankings?.find(i => i.internId === user.uid) : null;
   const displayTotal = user.role === 'intern' ? (myData?.evaluationsCompleted || 0) : (stats.performanceInsights?.totalEvaluations || 0);
 
@@ -202,44 +212,35 @@ const EvaluationTab = ({ user }) => {
     return () => { unsubInterns(); unsubSups(); };
   }, [user]);
 
-// --- FIXED: SEPARATE GLOBAL DATA (ANALYTICS) FROM UI DATA (LISTS) ---
   useEffect(() => {
     if (!user || allInterns.length === 0) return;
     const ref = collection(db, "evaluations");
     
-    // --- THE FIX IS HERE ---
     let qEvals;
     if (user.role === "supervisor") {
-        // Supervisors MUST strictly query only their own data to pass Firebase Security Rules
         qEvals = query(ref, where("supervisorId", "==", user.uid));
     } else {
-        // Coordinators and Interns use the global query
         qEvals = query(ref); 
     }
       
     const unsubEvals = onSnapshot(qEvals, snap => {
         const rawEvals = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         
-        // 1. Establish the Cohort (for Analytics & Leaderboard)
         const cohortInternIds = allInterns.map(i => i.uid);
         const cohortEvals = rawEvals.filter(ev => cohortInternIds.includes(ev.internId));
         const sortedCohortEvals = cohortEvals.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         setAllEvaluations(sortedCohortEvals); 
 
-        // 2. Filter specifically for the UI List (Inbox / My Reviews)
         let relevantEvalsForList = sortedCohortEvals;
         if (user.role === "supervisor") {
-            // Supervisors only see their action items in the list
             relevantEvalsForList = rawEvals.filter(ev => ev.supervisorId === user.uid)
                                           .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         } else if (user.role === "intern") {
-            // Interns ONLY see their own evaluations in the list
             relevantEvalsForList = rawEvals.filter(ev => ev.internId === user.uid && ["submitted", "completed"].includes(ev.status))
                                           .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         }
         setMyEvaluations(relevantEvalsForList);
         
-        // 3. Compute Global Analytics based on Cohort data
         const analytics = calculateAnalytics(sortedCohortEvals, allInterns);
         setPerformanceData(analytics);
         setInternRankings(analytics.internPerformance);
@@ -341,7 +342,7 @@ const EvaluationTab = ({ user }) => {
   const PERFECT_PRINT_CSS = `
       @page { 
           size: A4 portrait; 
-          margin: 30 !important; 
+          margin: 17 !important; 
       }
       body { 
           margin: 0 !important; 
@@ -500,7 +501,7 @@ const EvaluationTab = ({ user }) => {
   const updateSectionTitle = (id, v) => setFormTemplate(p => ({ ...p, sections: p.sections.map(s => s.id === id ? { ...s, title: v } : s) }));
   const addQuestion = (sid) => setFormTemplate(p => ({ ...p, sections: p.sections.map(s => s.id === sid ? { ...s, items: [...s.items, { id: `q_${Date.now()}`, text: "New Question" }] } : s) }));
   const removeQuestion = (sid, qid) => setFormTemplate(p => ({ ...p, sections: p.sections.map(s => s.id === sid ? { ...s, items: s.items.filter(i => i.id !== qid) } : s) }));
-  const updateQuestionText = (sid, qid, v) => setFormTemplate(p => ({ ...p, sections: p.sections.map(s => s.id === sid ? { ...s, items: s.items.map(i => i.id === qid ? { ...i, text: v } : i) } : s) }));
+  const updateQuestionText = (sid, qid, v) => setFormTemplate(p => ({ ...p, sections: p.sections.map(s => s.id === sid ? { ...s, items: s.items.map(i => i.id === qid ? { ...i, text: v } : s) } : s) }));
   const addEssay = () => setFormTemplate(p => ({ ...p, essays: [...p.essays, { id: `es_${Date.now()}`, question: "New Essay", placeholder: "..." }] }));
   const removeEssay = (id) => setFormTemplate(p => ({ ...p, essays: p.essays.filter(e => e.id !== id) }));
   const updateEssayText = (id, v) => setFormTemplate(p => ({ ...p, essays: p.essays.map(e => e.id === id ? { ...e, question: v } : e) }));
