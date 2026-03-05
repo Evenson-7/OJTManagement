@@ -4,6 +4,9 @@ import { useAuth } from "../context/AuthContext";
 import { Clock, Menu, X, LogOut, ChevronLeft, ChevronRight } from "lucide-react";
 import ProfileScreen from "./ProfileScreen";
 
+// 1. IMPORT LOGO HERE FOR BULLETPROOF BUILD RESOLUTION
+import logoImg from "../assets/logo.png"; 
+
 // --- AVATAR COMPONENT ---
 const Avatar = ({ profileImage, name, size = "md" }) => {
   const dims = size === "sm" ? "w-8 h-8 text-xs" : size === "lg" ? "w-12 h-12 text-base" : "w-10 h-10 text-sm";
@@ -65,14 +68,13 @@ export default function DashboardLayout({ children, tabs, activeTab, setActiveTa
         <div className={`flex items-center h-16 px-4 border-b-2 border-sidebar-border ${sidebarExpanded ? 'justify-between' : 'justify-center'}`}>
           {sidebarExpanded && (
             <div className="flex items-center gap-2.5">
-              {/* Inserted Official Logo Here */}
+              {/* 2. IMPLEMENTED DYNAMIC LOGO VARIABLE HERE */}
               <div className="w-8 h-8 rounded-xl flex items-center justify-center overflow-hidden bg-gradient-to-br from-brand-pastel to-sidebar-active">
-                <img src="/src/assets/logo.png" alt="OJT System Logo" className="w-full h-full object-contain p-1" />
+                <img src={logoImg} alt="OJT Management Logo" className="w-full h-full object-contain p-1" />
               </div>
-              {/* Reduced font weight to semibold */}
               <p className="font-['Poppins'] font-black text-lg leading-none">
-  OJT System
-</p>
+                OJT System
+              </p>
             </div>
           )}
           <button onClick={() => setSidebarExpanded(!sidebarExpanded)} className="w-8 h-8 rounded-xl flex items-center justify-center transition-all hover:bg-white/60 text-sidebar-muted">
@@ -81,14 +83,12 @@ export default function DashboardLayout({ children, tabs, activeTab, setActiveTa
         </div>
 
         <nav className="flex-1 px-3 py-5 overflow-y-auto">
-          {/* Reduced label weight to semibold */}
           {sidebarExpanded && <p className="text-[10px] font-semibold uppercase tracking-widest mb-3 px-3 text-sidebar-muted">Menu</p>}
           <ul className="space-y-1">
             {tabs.map(tab => {
               const isActive = activeTab === tab.id;
               return (
                 <li key={tab.id} className={!sidebarExpanded ? 'flex justify-center' : ''}>
-                  {/* Reduced link weight to medium */}
                   <button onClick={() => setActiveTab(tab.id)} title={!sidebarExpanded ? tab.name : undefined} className={`flex items-center gap-3 text-sm font-medium transition-all duration-200 group ${sidebarExpanded ? 'w-full px-3 py-2.5 rounded-2xl' : 'p-2 rounded-2xl'} ${isActive ? 'bg-white text-sidebar-text shadow-[0_2px_12px_rgba(66,165,255,0.15)]' : 'text-sidebar-muted'}`}>
                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-200 ${isActive ? 'bg-gradient-to-br from-sidebar-active to-brand-pastel' : ''}`}>
                       <tab.icon className="w-4 h-4" />
@@ -107,14 +107,12 @@ export default function DashboardLayout({ children, tabs, activeTab, setActiveTa
             <button onClick={() => setShowProfile(true)} className="flex items-center gap-3 w-full px-3 py-3 rounded-2xl transition-all bg-white shadow-[0_1px_8px_rgba(66,165,255,0.08)] hover:shadow-[0_3px_16px_rgba(66,165,255,0.16)]">
               <Avatar profileImage={user?.profileImage} name={user?.name} size="sm" />
               <div className="flex-1 text-left min-w-0">
-                {/* Reduced name weight to medium */}
                 <p className="font-medium text-xs truncate">{user?.name || 'User'}</p>
               </div>
             </button>
           ) : (
             <div className="flex justify-center py-1"><button onClick={() => setShowProfile(true)}><Avatar profileImage={user?.profileImage} name={user?.name} size="sm" /></button></div>
           )}
-          {/* Reduced logout button weight to medium */}
           <button onClick={() => setShowLogoutConfirm(true)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-medium transition-colors text-red-500 hover:bg-status-peach ${!sidebarExpanded ? 'justify-center' : ''}`}>
             <LogOut size={17} className="flex-shrink-0" />
             {sidebarExpanded && <span>Sign Out</span>}
@@ -132,7 +130,6 @@ export default function DashboardLayout({ children, tabs, activeTab, setActiveTa
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200 ${active ? 'bg-sidebar-active shadow-[0_2px_8px_rgba(66,165,255,0.2)]' : ''}`}>
                   <tab.icon className="w-5 h-5" />
                 </div>
-                {/* Reduced mobile label weight to medium */}
                 <span className="text-[10px] font-medium truncate w-full text-center">{tab.name}</span>
               </button>
             );
@@ -146,7 +143,6 @@ export default function DashboardLayout({ children, tabs, activeTab, setActiveTa
         <header className="sticky top-0 z-40 px-4 sm:px-6 h-16 flex items-center justify-between bg-white/95 backdrop-blur-md border-b-2 border-sidebar-border">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Reduced greeting weight to semibold */}
               <h1 className="text-base sm:text-lg font-semibold leading-none whitespace-nowrap text-sidebar-text">
                 {getGreeting()}, <span className="text-brand-dark">{user?.name?.split(' ')[0] || 'User'}</span>!
               </h1>
@@ -154,7 +150,6 @@ export default function DashboardLayout({ children, tabs, activeTab, setActiveTa
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Reduced time chip weight to medium */}
             <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-2xl font-medium bg-brand-light text-brand-dark border-2 border-brand-pastel text-[11px] whitespace-nowrap">
               <Clock size={12} className="text-brand-primary flex-shrink-0" />
               <span>{currentTime}</span>
@@ -164,6 +159,31 @@ export default function DashboardLayout({ children, tabs, activeTab, setActiveTa
             </button>
           </div>
         </header>
+
+        {/* 3. NEW: MOBILE DROPDOWN MENU IMPLEMENTED HERE */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden absolute top-20 right-4 w-64 bg-white rounded-2xl shadow-[0_10px_40px_rgba(66,165,255,0.2)] border-2 border-sidebar-border z-50 p-2 animate-fadeIn">
+            <button 
+              onClick={() => { setShowProfile(true); setIsMobileMenuOpen(false); }} 
+              className="flex items-center gap-3 w-full px-3 py-3 rounded-xl transition-all hover:bg-sidebar-bg"
+            >
+              <Avatar profileImage={user?.profileImage} name={user?.name} size="sm" />
+              <div className="flex-1 text-left min-w-0">
+                <p className="font-medium text-sm text-sidebar-text truncate">Profile Settings</p>
+              </div>
+            </button>
+            
+            <div className="h-[2px] w-full bg-sidebar-border my-1" />
+            
+            <button 
+              onClick={() => { setShowLogoutConfirm(true); setIsMobileMenuOpen(false); }} 
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-colors text-red-500 hover:bg-status-peach"
+            >
+              <LogOut size={17} className="flex-shrink-0" />
+              <span>Sign Out</span>
+            </button>
+          </div>
+        )}
 
         <main className="flex-1 overflow-y-auto overflow-x-hidden w-full p-4 sm:p-6 lg:p-8">
           {children}
@@ -179,11 +199,9 @@ export default function DashboardLayout({ children, tabs, activeTab, setActiveTa
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5 bg-status-peach">
               <LogOut size={24} className="text-red-500" />
             </div>
-            {/* Reduced modal title to semibold */}
             <h3 className="text-xl font-semibold text-center mb-1">Sign out?</h3>
             <p className="text-sm text-center mb-7 text-sidebar-muted">You'll need to log back in to access your workspace.</p>
             <div className="flex gap-3">
-              {/* Reduced modal buttons to medium */}
               <button onClick={() => setShowLogoutConfirm(false)} className="flex-1 px-4 py-3 rounded-2xl text-sm font-medium transition-colors border-2 border-sidebar-border text-sidebar-muted hover:bg-sidebar-bg">Cancel</button>
               <button onClick={() => { setShowLogoutConfirm(false); logout(); }} className="flex-1 px-4 py-3 rounded-2xl text-sm font-medium text-white bg-gradient-to-br from-red-400 to-red-500 hover:opacity-90">Sign Out</button>
             </div>
