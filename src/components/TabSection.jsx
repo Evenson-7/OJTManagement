@@ -17,6 +17,7 @@ import { doc, deleteDoc } from "firebase/firestore";
 import { db } from "../../firebaseConfig"; 
 
 import EvaluationForm from "./EvalFormat"; 
+import { translateFinalGrade } from "../utils/EvalForm";
 
 const getLetterMetric = (score) => { if (score >= 4.5) return "E"; if (score >= 4.0) return "A"; if (score >= 3.0) return "S"; if (score >= 2.0) return "N"; return "P"; };
 
@@ -143,18 +144,13 @@ const InternRosterSection = ({ data, handlers, user }) => {
                                             <td className="px-6 py-4">
                                                 <select 
                                                     value={intern.internshipStatus || "Active"} 
-                                                    onChange={(e) => {
-                                                        const newStatus = e.target.value;
-                                                        if (newStatus === "Finished" && internEvals.length === 0) {
-                                                            toast.error("Cannot mark as Finished. Intern requires at least 1 evaluation.");
-                                                            return;
-                                                        }
-                                                        handlers.handleChangeInternStatus(intern.uid, newStatus);
-                                                    }} 
+                                                    onChange={(e) => handlers.handleChangeInternStatus(intern.uid, e.target.value)} 
                                                     className={`text-xs font-bold px-3 py-1.5 rounded outline-none cursor-pointer transition-colors shadow-sm border ${intern.internshipStatus === "Finished" ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-white"}`}
                                                 >
                                                     <option value="Active">Active (In Progress)</option>
-                                                    <option value="Finished">Finished (Ready for Cert)</option>
+                                                    {internEvals.length > 0 && (
+                                                        <option value="Finished">Finished (Ready for Cert)</option>
+                                                    )}
                                                 </select>
                                             </td>
                                         )}
@@ -199,7 +195,7 @@ const InternRosterSection = ({ data, handlers, user }) => {
                                                             <label key={ev.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer border border-transparent hover:border-gray-200 transition-colors">
                                                                 <input type="checkbox" checked={selectedEvals.includes(ev.id)} onChange={() => toggleEvalSelection(ev.id)} className="w-4 h-4 text-[#0094FF] rounded focus:ring-[#0094FF]" />
                                                                 <span className="font-medium text-gray-800 flex-1">{ev.evaluationType}</span>
-                                                                <span className="font-bold text-[#0094FF]">Score: {Number(ev.overallScore).toFixed(2)}</span>
+                                                                <span className="font-bold text-[#0094FF]">Score: {translateFinalGrade(ev.overallScore, ev.savedTemplateSnapshot?.gradingFormat)}</span>
                                                             </label>
                                                         ))}
                                                     </div>
@@ -566,8 +562,10 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
                                                 <span className="font-black text-[#002B66] text-xl">{hist.date}</span>
                                              </div>
                                              <div className="text-right">
-                                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Overall Score</span>
-                                                <span className="font-black text-[#0094FF] text-2xl bg-blue-100/50 px-3 py-1 rounded-lg border border-blue-100">{Number(hist.score).toFixed(2)}</span>
+                                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Official Grade</span>
+                                                <span className="font-black text-[#0094FF] text-2xl bg-blue-100/50 px-3 py-1 rounded-lg border border-blue-100">
+                                                    {translateFinalGrade(hist.score, hist.format)}
+                                                </span>
                                              </div>
                                          </div>
 
@@ -715,7 +713,10 @@ const DashboardView = ({ data, handlers, user }) => {
                                         <div>
                                             <h4 className="font-bold text-gray-900">{ev.evaluationType} for {ev.internName}</h4>
                                             <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
-                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${ev.status === 'submitted' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{ev.status}</span><span>•</span><span className="font-medium text-gray-700">Score: {ev.overallScore ? Number(ev.overallScore).toFixed(2) : 'N/A'}</span>
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${ev.status === 'submitted' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{ev.status}</span><span>•</span>
+                                                <span className="font-medium text-gray-700">
+                                                    Grade: {translateFinalGrade(ev.overallScore, ev.savedTemplateSnapshot?.gradingFormat)}
+                                                </span>
                                             </div>
                                         </div>
                                     </div>
@@ -747,7 +748,6 @@ const DashboardView = ({ data, handlers, user }) => {
                         <HiOutlinePencilSquare className="text-[#0094FF] w-6 h-6" /> Manage Custom Templates
                     </h3>
                     
-                    {/* --- FIXED: REPLACED GRID WITH FLEX-WRAP FOR COMPACT SIZING --- */}
                     <div className="flex flex-wrap gap-4">
                         {data.customTemplates.map(template => (
                             <div key={template.id} className="w-full sm:w-[280px] border border-gray-200 bg-gray-50 rounded-lg p-4 flex flex-col justify-between hover:border-[#0094FF] transition-colors shadow-sm">
@@ -784,7 +784,6 @@ const DashboardView = ({ data, handlers, user }) => {
                                     </div>
                                 </div>
                                 <div className="flex gap-2 mt-4 md:mt-0 w-full md:w-auto">
-                                    {/* --- FIXED: REMOVED EDIT ASSIGNMENT, ENHANCED DELETE BUTTON WITH TEXT --- */}
                                     <button onClick={() => handleRecallPending(task.id)} className="w-full md:w-auto px-4 py-2 text-sm bg-white border border-red-200 text-red-600 rounded-lg font-bold hover:bg-red-50 transition-colors flex items-center justify-center gap-2">
                                         <HiOutlineTrash className="w-4 h-4" /> Unsent
                                     </button>
@@ -877,7 +876,10 @@ const DashboardView = ({ data, handlers, user }) => {
                                         <div>
                                             <h4 className="font-bold text-gray-900">{ev.evaluationType} for {ev.internName}</h4>
                                             <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
-                                                <span className="text-green-700 font-bold text-[10px] tracking-wider uppercase px-2 py-0.5 bg-green-200 rounded">Submitted</span><span>•</span><span className="font-medium text-gray-700">Score: {Number(ev.overallScore).toFixed(2)}</span>
+                                                <span className="text-green-700 font-bold text-[10px] tracking-wider uppercase px-2 py-0.5 bg-green-200 rounded">Submitted</span><span>•</span>
+                                                <span className="font-medium text-gray-700">
+                                                    Grade: {translateFinalGrade(ev.overallScore, ev.savedTemplateSnapshot?.gradingFormat)}
+                                                </span>
                                             </div>
                                         </div>
                                     </div>

@@ -9,7 +9,7 @@ import { db } from "../../../firebaseConfig";
 import toast, { Toaster } from "react-hot-toast";
 import TabSection from "../../components/TabSection"; 
 import EvaluationCertificate from '../../components/EvaluationCertificate'; 
-import { EVALUATION_TEMPLATES } from '../../utils//EvalForm'; 
+import { EVALUATION_TEMPLATES } from '../../utils/EvalForm'; 
 
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro'; 
@@ -22,8 +22,37 @@ import { FileText, Award, BarChart2, Send, Plus } from "lucide-react";
 const COLORS = { primary: "text-[#42A5FF]", accent: "text-[#0094FF]", navy: "text-[#002B66]", bgLight: "bg-[#BDE4F7]", bgNavy: "bg-[#002B66]" };
 const ratingScale = [ { value: "5", label: "Excellent", range: "E", score: 5, calculationValue: 5, color: "green" }, { value: "4", label: "Above Standard", range: "A", score: 4, calculationValue: 4, color: "blue" }, { value: "3", label: "Standard", range: "S", score: 3, calculationValue: 3, color: "yellow" }, { value: "2", label: "Needs Improvement", range: "N", score: 2, calculationValue: 2, color: "orange" }, { value: "1", label: "Poor", range: "P", score: 1, calculationValue: 1, color: "red" } ];
 
-const calculateSectionScore = (sectionData) => { if (!sectionData) return 0; const ratings = Object.values(sectionData).filter(r => r); if (ratings.length === 0) return 0; const total = ratings.reduce((sum, r) => { const match = ratingScale.find(s => String(s.value) === String(r) || String(s.range) === String(r)); return sum + (match?.calculationValue || 0); }, 0); return Number((total / ratings.length).toFixed(2)); };
-const calculateOverallScore = (formData, templateSections) => { if (!templateSections || !Array.isArray(templateSections)) return 0; let totalScore = 0; let totalCount = 0; templateSections.forEach((section) => { const sectionRatings = formData[section.id] || {}; Object.values(sectionRatings).forEach((val) => { const match = ratingScale.find(s => String(s.value) === String(val) || String(s.range) === String(val)); if (match) { totalScore += match.calculationValue; totalCount++; } }); }); return totalCount === 0 ? 0 : Number((totalScore / totalCount).toFixed(2)); };
+const calculateSectionScore = (sectionData, gradingFormat = "CTE_5_POINT") => { 
+    if (!sectionData) return 0; 
+    const ratings = Object.values(sectionData).filter(r => r !== "" && r !== null); 
+    if (ratings.length === 0) return 0; 
+    const total = ratings.reduce((sum, r) => { 
+        if (gradingFormat === "CBE_100_POINT") return sum + Number(r);
+        const match = ratingScale.find(s => String(s.value) === String(r) || String(s.range) === String(r)); 
+        return sum + (match?.calculationValue || Number(r)); 
+    }, 0); 
+    return Number((total / ratings.length).toFixed(2)); 
+};
+
+const calculateOverallScore = (formData, templateSections, gradingFormat = "CTE_5_POINT") => { 
+    if (!templateSections || !Array.isArray(templateSections)) return 0; 
+    let totalScore = 0; let totalCount = 0; 
+    templateSections.forEach((section) => { 
+        const sectionRatings = formData[section.id] || {}; 
+        Object.values(sectionRatings).forEach((val) => { 
+            if (val !== "" && val !== null) {
+                if (gradingFormat === "CBE_100_POINT") {
+                    totalScore += Number(val);
+                    totalCount++;
+                } else {
+                    const match = ratingScale.find(s => String(s.value) === String(val) || String(s.range) === String(val)); 
+                    if (match) { totalScore += match.calculationValue; totalCount++; }
+                }
+            }
+        }); 
+    }); 
+    return totalCount === 0 ? 0 : Number((totalScore / totalCount).toFixed(2)); 
+};
 
 const badgeDefinitions = [ 
     { id: "finisher", name: "Mission Complete", description: "Successfully completed 2 Evaluations.", icon: <FaMedal />, color: "from-gray-600 to-gray-800", criteria: (evals) => evals.length >= 2 },
@@ -84,12 +113,12 @@ const calculateAnalytics = (allEvaluations, allInternsList) => {
       isComplete: isComplete, 
       evaluationsCompleted: iEvals.length, 
       
-      // FIXED: WE NOW EXTRACT SPECIFIC STRENGTHS/WEAKNESSES FOR EVERY PAST FORM
       history: iEvals.map(e => {
-          const specificStats = analyzeSections([e]); // Extract specific pros/cons for this exact evaluation record
+          const specificStats = analyzeSections([e]); 
           return { 
               date: e.evaluationType, 
               score: e.overallScore,
+              format: e.savedTemplateSnapshot?.gradingFormat || "CTE_5_POINT",
               strengths: specificStats.strengths,
               improvementAreas: specificStats.improvementAreas
           };
@@ -126,7 +155,7 @@ const EvaluationDashboard = ({ stats, rankings, user }) => {
   const myData = user.role === 'intern' ? rankings?.find(i => i.internId === user.uid) : null;
   const displayTotal = user.role === 'intern' ? (myData?.evaluationsCompleted || 0) : (stats.performanceInsights?.totalEvaluations || 0);
 
-let topPerformerName = "Pending";
+  let topPerformerName = "Pending";
   if (topPerformerData) {
       const firstName = topPerformerData.internName.split(" ")[0];
       if (user.role === 'intern' && topPerformerData.internId === user.uid) {
@@ -144,7 +173,7 @@ let topPerformerName = "Pending";
           <div>
               <p className="text-sm font-medium text-gray-500 mb-1">Top Performer</p>
               <h3 className={`text-xl font-bold ${COLORS.navy} truncate`}>{topPerformerName}</h3>
-              <p className={`text-xs ${COLORS.accent} font-medium mt-1`}>{topPerformerData ? `Score: ${topPerformerData.averageScore}` : "Evaluating..."}</p>
+              <p className={`text-xs ${COLORS.accent} font-medium mt-1`}>{topPerformerData ? `Score: ${topPerformerData.averageScore.toFixed(2)}` : "Evaluating..."}</p>
           </div>
           <div className={`w-12 h-12 ${COLORS.bgNavy} rounded-full flex items-center justify-center text-white`}><Award size={24} /></div>
       </div>
@@ -328,9 +357,10 @@ const EvaluationTab = ({ user }) => {
         }
     }
     try {
-      const overallScore = calculateOverallScore(evaluationForm, formTemplate.sections);
-      const sectionScores = {};
-      formTemplate.sections.forEach(sec => { sectionScores[sec.title] = calculateSectionScore(evaluationForm[sec.id]); });
+// Find these two lines inside handleSaveEvaluation:
+const overallScore = calculateOverallScore(evaluationForm, formTemplate.sections, formTemplate.gradingFormat);
+const sectionScores = {};
+formTemplate.sections.forEach(sec => { sectionScores[sec.title] = calculateSectionScore(evaluationForm[sec.id], formTemplate.gradingFormat); });
       const dataToSave = { ...evaluationForm, status, overallScore, sectionScores, updatedAt: serverTimestamp() };
       if (status === "submitted") dataToSave.submittedAt = serverTimestamp();
       await updateDoc(doc(db, "evaluations", editingEvaluation.id), dataToSave); 
@@ -340,31 +370,10 @@ const EvaluationTab = ({ user }) => {
   };
 
   const PERFECT_PRINT_CSS = `
-      @page { 
-          size: A4 portrait; 
-          margin: 17 !important; 
-      }
-      body { 
-          margin: 0 !important; 
-          padding: 15mm !important; 
-          background-color: white !important; 
-          -webkit-print-color-adjust: exact !important; 
-          print-color-adjust: exact !important; 
-          font-family: sans-serif; 
-      }
-      #printable-evaluation-content { 
-          width: 100% !important; 
-          max-width: 100% !important; 
-          margin: 0 auto !important; 
-          box-sizing: border-box !important;
-          box-shadow: none !important; 
-          border: none !important; 
-          padding: 0 !important; 
-      }
-      .pdf-block { 
-          page-break-inside: avoid !important; 
-          break-inside: avoid !important; 
-      }
+      @page { size: A4 portrait; margin: 17 !important; }
+      body { margin: 0 !important; padding: 15mm !important; background-color: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; font-family: sans-serif; }
+      #printable-evaluation-content { width: 100% !important; max-width: 100% !important; margin: 0 auto !important; box-sizing: border-box !important; box-shadow: none !important; border: none !important; padding: 0 !important; }
+      .pdf-block { page-break-inside: avoid !important; break-inside: avoid !important; }
       .no-print { display: none !important; }
   `;
 
@@ -398,14 +407,7 @@ const EvaluationTab = ({ user }) => {
           const textAreas = clone.querySelectorAll('textarea');
           textAreas.forEach(ta => {
               const div = document.createElement('div');
-              div.style.whiteSpace = 'pre-wrap';
-              div.style.border = '1px solid #e5e7eb';
-              div.style.padding = '12px';
-              div.style.borderRadius = '6px';
-              div.style.fontSize = '14px';
-              div.style.minHeight = '80px';
-              div.style.background = '#f9fafb';
-              div.style.wordWrap = 'break-word';
+              div.style.whiteSpace = 'pre-wrap'; div.style.border = '1px solid #e5e7eb'; div.style.padding = '12px'; div.style.borderRadius = '6px'; div.style.fontSize = '14px'; div.style.minHeight = '80px'; div.style.background = '#f9fafb'; div.style.wordWrap = 'break-word';
               div.textContent = ta.value || "No response provided.";
               ta.parentNode.replaceChild(div, ta);
           });
@@ -415,20 +417,14 @@ const EvaluationTab = ({ user }) => {
           clone.appendChild(styleEl);
           
           const wrapper = document.createElement('div');
-          wrapper.style.position = 'absolute'; 
-          wrapper.style.top = '-10000px'; 
-          wrapper.style.left = '-10000px';
+          wrapper.style.position = 'absolute'; wrapper.style.top = '-10000px'; wrapper.style.left = '-10000px';
           wrapper.appendChild(clone);
           document.body.appendChild(wrapper);
           
           await new Promise(resolve => setTimeout(resolve, 600));
 
           const pdf = new jsPDF('p', 'mm', 'a4'); 
-          const pdfWidth = 210; 
-          const pdfHeight = 297; 
-          const marginX = 20; 
-          const marginTop = 20; 
-          const marginBot = 20;
+          const pdfWidth = 210; const pdfHeight = 297; const marginX = 20; const marginTop = 20; const marginBot = 20;
           const contentWidth = pdfWidth - (marginX * 2);
           const maxPageHeight = pdfHeight - marginTop - marginBot;
           
@@ -437,50 +433,21 @@ const EvaluationTab = ({ user }) => {
           const blocks = clone.querySelectorAll('.pdf-block');
           for (let i = 0; i < blocks.length; i++) {
               const block = blocks[i];
-              const canvas = await html2canvas(block, { 
-                  scale: 2, 
-                  useCORS: true, 
-                  logging: false, 
-                  windowWidth: renderWidthPx, 
-                  backgroundColor: "#ffffff" 
-              });
-              
+              const canvas = await html2canvas(block, { scale: 2, useCORS: true, logging: false, windowWidth: renderWidthPx, backgroundColor: "#ffffff" });
               const imgData = canvas.toDataURL('image/png');
               const imgProps = pdf.getImageProperties(imgData);
               const blockPdfHeight = (imgProps.height * contentWidth) / imgProps.width;
 
               if (currentY + blockPdfHeight > pdfHeight - marginBot) { 
                   if (blockPdfHeight > maxPageHeight) {
-                      if (currentY !== marginTop) {
-                          pdf.addPage();
-                          currentY = marginTop;
-                      }
-                      
-                      let heightLeft = blockPdfHeight;
-                      let position = 0;
-                      
+                      if (currentY !== marginTop) { pdf.addPage(); currentY = marginTop; }
+                      let heightLeft = blockPdfHeight; let position = 0;
                       while (heightLeft > 0) {
                           pdf.addImage(imgData, 'PNG', marginX, marginTop + position, contentWidth, blockPdfHeight);
-                          
-                          if (heightLeft > maxPageHeight) {
-                              pdf.addPage();
-                              position -= maxPageHeight;
-                              heightLeft -= maxPageHeight;
-                          } else {
-                              currentY = marginTop + heightLeft + 8; 
-                              heightLeft = 0; 
-                          }
+                          if (heightLeft > maxPageHeight) { pdf.addPage(); position -= maxPageHeight; heightLeft -= maxPageHeight; } else { currentY = marginTop + heightLeft + 8; heightLeft = 0; }
                       }
-                  } else {
-                      pdf.addPage(); 
-                      currentY = marginTop; 
-                      pdf.addImage(imgData, 'PNG', marginX, currentY, contentWidth, blockPdfHeight);
-                      currentY += blockPdfHeight + 8; 
-                  }
-              } else {
-                  pdf.addImage(imgData, 'PNG', marginX, currentY, contentWidth, blockPdfHeight);
-                  currentY += blockPdfHeight + 8;
-              }
+                  } else { pdf.addPage(); currentY = marginTop; pdf.addImage(imgData, 'PNG', marginX, currentY, contentWidth, blockPdfHeight); currentY += blockPdfHeight + 8; }
+              } else { pdf.addImage(imgData, 'PNG', marginX, currentY, contentWidth, blockPdfHeight); currentY += blockPdfHeight + 8; }
           }
           
           document.body.removeChild(wrapper); 
@@ -489,11 +456,7 @@ const EvaluationTab = ({ user }) => {
           toast.dismiss("pdf-form-toast"); 
           toast.success("Center-Fit A4 PDF Downloaded!");
 
-      } catch (err) { 
-          console.error("PDF Error:", err); 
-          toast.dismiss("pdf-form-toast"); 
-          toast.error("Failed to generate PDF."); 
-      }
+      } catch (err) { console.error("PDF Error:", err); toast.dismiss("pdf-form-toast"); toast.error("Failed to generate PDF."); }
   };
 
   const addSection = () => setFormTemplate(p => ({ ...p, sections: [...p.sections, { id: `sec_${Date.now()}`, title: "New Section", items: [] }] }));
@@ -527,7 +490,7 @@ const EvaluationTab = ({ user }) => {
   const handleViewCertificate = (ev) => { const intern = allInterns.find(i => i.uid === ev.internId); setViewingCertificate({ evaluation: ev, intern }); };
   const resetForm = () => { setEvaluationForm(initialFormState); setEditingEvaluation(null); setIsEditMode(false); };
   
-  const dataProps = { supervisors, customTemplates, evaluations: myEvaluations, allEvaluations, myInterns, allInterns, internRankings, myBadges, performanceData, evaluationForm, editingEvaluation, isEditMode, ratingScale, formTemplate, badgeDefinitions, calculateSectionScore };
+  const dataProps = { supervisors, customTemplates, evaluations: myEvaluations, allEvaluations, myInterns, allInterns, internRankings, myBadges, performanceData, evaluationForm, editingEvaluation, isEditMode, ratingScale, formTemplate, badgeDefinitions, calculateSectionScore, calculateOverallScore };
   const handlerProps = { setActiveView, handleChangeInternStatus, handleComputeOfficialGrade, handleEditEvaluation, handleViewEvaluation, resetEvaluationForm: resetForm, handleSaveEvaluation, handleRatingChange, handleViewCertificate, handlePrintEvaluation, handlePDF, handleFormChange: (f, v) => setEvaluationForm(p => ({...p, [f]: v})), handleEssayAnswerChange: (id, v) => setEvaluationForm(p => ({...p, essayQuestions: {...p.essayQuestions, [id]: v}})), addSection, removeSection, updateSectionTitle, addQuestion, removeQuestion, updateQuestionText, addEssay, removeEssay, updateEssayText, updateTemplateTitle: (v) => setFormTemplate(p => ({...p, title: v})), handleSaveCustomTemplate, handleEditTemplate, handleDeleteTemplate };
 
   return (
