@@ -31,6 +31,8 @@ const SearchIcon = ({ className }) => (<svg className={className} fill="none" vi
 const FilterIcon = ({ className }) => (<svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>);
 const PlusIcon = ({ className }) => (<svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>);
 const XIcon = ({ className }) => (<svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>);
+const EyeIcon = ({ className }) => (<svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>);
+const EyeOffIcon = ({ className }) => (<svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>);
 
 function CorDash() {
   const { user } = useAuth();
@@ -47,6 +49,7 @@ function CorDash() {
   // Add Supervisor State
   const [isAddSupModalOpen, setIsAddSupModalOpen] = useState(false);
   const [isCreatingSup, setIsCreatingSup] = useState(false);
+  const [showPassword, setShowPassword] = useState(false); // Controls password visibility
   const [supForm, setSupForm] = useState({
     firstName: '', lastName: '', email: '', password: '', 
     phoneNumber: '', companyName: '', department: '', position: ''
@@ -97,6 +100,13 @@ function CorDash() {
   // --- LOGIC: CREATE SUPERVISOR ---
   const handleCreateSupervisor = async (e) => {
     e.preventDefault();
+    
+    // Strict validation: Must be exactly 11 digits before proceeding
+    if (supForm.phoneNumber.length < 11) {
+      toast.error("Contact number must be exactly 11 digits.");
+      return;
+    }
+
     setIsCreatingSup(true);
 
     let secondaryApp;
@@ -123,6 +133,7 @@ function CorDash() {
         
         setSupForm({ firstName: '', lastName: '', email: '', password: '', phoneNumber: '', companyName: '', department: '', position: '' });
         setIsAddSupModalOpen(false);
+        setShowPassword(false);
         fetchData(); 
     } catch (error) {
         if (newSupUid && secondaryAuth && secondaryAuth.currentUser) {
@@ -139,7 +150,17 @@ function CorDash() {
     }
   };
 
-  const handleSupChange = (e) => setSupForm({ ...supForm, [e.target.name]: e.target.value });
+  const handleSupChange = (e) => {
+    const { name, value } = e.target;
+    
+    if (name === "phoneNumber") {
+      // Strips non-numeric characters and limits length to 11
+      const numbersOnly = value.replace(/\D/g, '').slice(0, 11);
+      setSupForm({ ...supForm, [name]: numbersOnly });
+    } else {
+      setSupForm({ ...supForm, [name]: value });
+    }
+  };
 
   // Helpers
   const getSupervisorName = (id) => {
@@ -290,7 +311,7 @@ function CorDash() {
           <div className="bg-white rounded-3xl w-full max-w-2xl shadow-[0_20px_60px_rgba(66,165,255,0.16)] overflow-hidden animate-fadeIn">
             <div className="px-6 py-5 border-b border-sidebar-border flex justify-between items-center bg-sidebar-bg">
               <h3 className="text-lg font-bold text-sidebar-text">Add New Supervisor</h3>
-              <button onClick={() => setIsAddSupModalOpen(false)} className="text-sidebar-muted hover:text-sidebar-text bg-white p-1 rounded-xl shadow-sm border border-sidebar-border transition-colors">
+              <button onClick={() => { setIsAddSupModalOpen(false); setShowPassword(false); }} className="text-sidebar-muted hover:text-sidebar-text bg-white p-1 rounded-xl shadow-sm border border-sidebar-border transition-colors">
                 <XIcon className="w-5 h-5" />
               </button>
             </div>
@@ -314,7 +335,7 @@ function CorDash() {
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-sidebar-text mb-1.5">Phone Number</label>
-                  <input type="tel" name="phoneNumber" value={supForm.phoneNumber} onChange={handleSupChange} required className="w-full border-[1.5px] border-sidebar-border rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-brand-pastel focus:border-brand-primary outline-none font-medium text-sidebar-text" placeholder="09123456789" />
+                  <input type="text" name="phoneNumber" value={supForm.phoneNumber} onChange={handleSupChange} required className="w-full border-[1.5px] border-sidebar-border rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-brand-pastel focus:border-brand-primary outline-none font-medium text-sidebar-text" placeholder="09123456789" />
                 </div>
               </div>
 
@@ -336,12 +357,30 @@ function CorDash() {
 
               <div className="mb-8">
                 <label className="block text-sm font-bold text-sidebar-text mb-1.5">Initial Password</label>
-                <input type="password" name="password" value={supForm.password} onChange={handleSupChange} required minLength={6} className="w-full border-[1.5px] border-sidebar-border rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-brand-pastel focus:border-brand-primary outline-none font-medium text-sidebar-text" placeholder="******" />
+                <div className="relative">
+                  <input 
+                    type={showPassword ? "text" : "password"} 
+                    name="password" 
+                    value={supForm.password} 
+                    onChange={handleSupChange} 
+                    required 
+                    minLength={6} 
+                    placeholder="******"
+                    className="w-full border-[1.5px] border-sidebar-border rounded-xl px-4 py-2.5 pr-12 focus:ring-2 focus:ring-brand-pastel focus:border-brand-primary outline-none font-medium text-sidebar-text" 
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => setShowPassword(!showPassword)} 
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sidebar-muted hover:text-sidebar-text focus:outline-none transition-colors"
+                  >
+                    {showPassword ? <EyeOffIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
+                  </button>
+                </div>
                 <p className="text-xs text-sidebar-muted mt-2 font-medium">Supervisor can change this later.</p>
               </div>
 
               <div className="flex justify-end gap-3 pt-5 border-t border-sidebar-border">
-                <button type="button" onClick={() => setIsAddSupModalOpen(false)} className="px-5 py-2.5 text-sidebar-muted bg-white border-2 border-sidebar-border rounded-xl hover:bg-sidebar-bg transition-colors font-bold">Cancel</button>
+                <button type="button" onClick={() => { setIsAddSupModalOpen(false); setShowPassword(false); }} className="px-5 py-2.5 text-sidebar-muted bg-white border-2 border-sidebar-border rounded-xl hover:bg-sidebar-bg transition-colors font-bold">Cancel</button>
                 <button type="submit" disabled={isCreatingSup} className="px-6 py-2.5 bg-brand-primary text-white rounded-xl hover:bg-brand-dark transition-colors font-bold flex items-center disabled:opacity-50 shadow-md">
                    {isCreatingSup && <Loader className="w-4 h-4 mr-2 animate-spin" />}
                    {isCreatingSup ? 'Creating...' : 'Create Account'}
