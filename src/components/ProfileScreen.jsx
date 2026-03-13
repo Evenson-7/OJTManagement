@@ -72,7 +72,8 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
     lastName: "",
     phoneNumber: "",
     companyName: "",
-    department: "",     
+    department: "",             // Used for supervisors
+    internshipDepartment: "",   // Specifically for interns
     departmentId: "",   
     school: "The Lewis College",
     course: "",
@@ -121,8 +122,9 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
           firstName: fName,
           lastName: lName,
           phoneNumber: data.phoneNumber || "",
-          companyName: data.companyName || "", // Maps to "pnp" for your intern
-          department: data.department || "",   // Maps to "opeys" for your intern
+          companyName: data.companyName || "", 
+          department: data.department || "",   
+          internshipDepartment: data.internshipDepartment || data.department || "", // Fallback logic
           departmentId: data.departmentId || "", 
           school: data.school || "The Lewis College",
           course: data.course || "",
@@ -155,12 +157,10 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
 
   const handleCollegeChange = (e) => {
     const selectedId = e.target.value;
-    const selectedCollege = COLLEGES.find(c => c.id === selectedId);
     
     setProfileData(prev => ({
       ...prev,
       departmentId: selectedId,
-      // We don't overwrite `department` here anymore because `department` is for the Company, not the College Name.
       course: "" 
     }));
   };
@@ -242,9 +242,8 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
     if (user.role === "intern") {
       if (!profileData.departmentId) newErrors.departmentId = "Required";
       if (!profileData.course) newErrors.course = "Required";
-      // Added validation for intern's company details
       if (!profileData.companyName?.trim()) newErrors.companyName = "Required";
-      if (!profileData.department?.trim()) newErrors.department = "Required"; 
+      if (!profileData.internshipDepartment?.trim()) newErrors.internshipDepartment = "Required"; // Validates the correct field
     } else if (user.role === "coordinator") {
       if (!profileData.departmentId) newErrors.departmentId = "Required";
     } else if (user.role === "supervisor") {
@@ -398,8 +397,9 @@ function ProfileScreen({ user, onClose, onUpdateProfile }) {
                       <InputGroup label="Company Name" error={errors.companyName}>
                         <input type="text" value={profileData.companyName} onChange={e => handleInputChange('companyName', e.target.value)} className={INPUT_STYLE} placeholder="Company Name" />
                       </InputGroup>
-                      <InputGroup label="Internship Department" error={errors.department}>
-                        <input type="text" value={profileData.department} onChange={e => handleInputChange('department', e.target.value)} className={INPUT_STYLE} placeholder="Assigned Dept" />
+                      <InputGroup label="Internship Department" error={errors.internshipDepartment}>
+                        {/* Changed to bind to internshipDepartment */}
+                        <input type="text" value={profileData.internshipDepartment} onChange={e => handleInputChange('internshipDepartment', e.target.value)} className={INPUT_STYLE} placeholder="Assigned Dept" />
                       </InputGroup>
                     </div>
                   </div>

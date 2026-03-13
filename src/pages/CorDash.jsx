@@ -9,10 +9,12 @@ import { initializeApp, deleteApp } from "firebase/app";
 import { toast } from 'react-hot-toast';
 import { Loader } from "lucide-react"; 
 
-// Layout & Tabs
+// Layout, Tabs & Components
 import DashboardLayout from "../components/DashboardLayout";
 import ReportsTab from "./tabs/ReportsTab";
 import EvaluationTab from "./tabs/EvaluationTab";
+import InternOver from "../components/InternOver"; 
+import LogAtt from "../components/logAtt";         
 
 // --- DATA CONSTANTS ---
 const COLLEGES = [
@@ -34,10 +36,45 @@ const XIcon = ({ className }) => (<svg className={className} fill="none" viewBox
 const EyeIcon = ({ className }) => (<svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>);
 const EyeOffIcon = ({ className }) => (<svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>);
 
+// --- REUSABLE HEADER COMPONENT MOVED OUTSIDE MAIN COMPONENT ---
+const FilterHeader = ({ title, showDeptFilter = true, rightAction = null, searchTerm, setSearchTerm, filterDept, setFilterDept }) => (
+  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+    <h3 className="text-xl font-bold text-sidebar-text">{title}</h3>
+    <div className="flex flex-col sm:flex-row gap-3">
+      <div className="relative">
+        <SearchIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-sidebar-muted" />
+        <input 
+          type="text" 
+          placeholder="Search..." 
+          className="pl-10 pr-4 py-2 border-[1.5px] border-sidebar-border rounded-xl focus:ring-2 focus:ring-brand-pastel focus:border-brand-primary outline-none w-full sm:w-64 transition-all" 
+          value={searchTerm} 
+          onChange={(e) => setSearchTerm(e.target.value)} 
+        />
+      </div>
+      {showDeptFilter && (
+        <div className="relative">
+          <FilterIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-sidebar-muted" />
+          <select 
+            value={filterDept} 
+            onChange={(e) => setFilterDept(e.target.value)} 
+            className="pl-10 pr-8 py-2 border-[1.5px] border-sidebar-border rounded-xl focus:ring-2 focus:ring-brand-pastel focus:border-brand-primary outline-none appearance-none bg-white cursor-pointer hover:border-brand-pastel transition-all w-full sm:w-auto font-medium text-sidebar-text"
+          >
+            <option value="all">All Departments</option>
+            {COLLEGES.map((col) => (<option key={col.id} value={col.id}>{col.code} - {col.name}</option>))}
+          </select>
+        </div>
+      )}
+      {rightAction}
+    </div>
+  </div>
+);
+// -------------------------------------------------------------
+
 function CorDash() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
-  
+  const [showLogs, setShowLogs] = useState(false);
+
   // Data & Filter States
   const [stats, setStats] = useState({ supervisors: 0, interns: 0 });
   const [supervisors, setSupervisors] = useState([]);
@@ -49,7 +86,7 @@ function CorDash() {
   // Add Supervisor State
   const [isAddSupModalOpen, setIsAddSupModalOpen] = useState(false);
   const [isCreatingSup, setIsCreatingSup] = useState(false);
-  const [showPassword, setShowPassword] = useState(false); // Controls password visibility
+  const [showPassword, setShowPassword] = useState(false);
   const [supForm, setSupForm] = useState({
     firstName: '', lastName: '', email: '', password: '', 
     phoneNumber: '', companyName: '', department: '', position: ''
@@ -100,13 +137,10 @@ function CorDash() {
   // --- LOGIC: CREATE SUPERVISOR ---
   const handleCreateSupervisor = async (e) => {
     e.preventDefault();
-    
-    // Strict validation: Must be exactly 11 digits before proceeding
     if (supForm.phoneNumber.length < 11) {
       toast.error("Contact number must be exactly 11 digits.");
       return;
     }
-
     setIsCreatingSup(true);
 
     let secondaryApp;
@@ -130,7 +164,6 @@ function CorDash() {
         });
 
         toast.success("Supervisor account created successfully!");
-        
         setSupForm({ firstName: '', lastName: '', email: '', password: '', phoneNumber: '', companyName: '', department: '', position: '' });
         setIsAddSupModalOpen(false);
         setShowPassword(false);
@@ -152,9 +185,7 @@ function CorDash() {
 
   const handleSupChange = (e) => {
     const { name, value } = e.target;
-    
     if (name === "phoneNumber") {
-      // Strips non-numeric characters and limits length to 11
       const numbersOnly = value.replace(/\D/g, '').slice(0, 11);
       setSupForm({ ...supForm, [name]: numbersOnly });
     } else {
@@ -162,18 +193,17 @@ function CorDash() {
     }
   };
 
-  // Helpers
   const getSupervisorName = (id) => {
     if (!id) return "Unassigned";
     const sup = supervisors.find(s => s.id === id);
     return sup ? sup.name || `${sup.firstName} ${sup.lastName}` : "Unknown ID";
   };
+  
   const getCollegeName = (id) => {
     const college = COLLEGES.find(c => c.id === id);
     return college ? college.code : "N/A";
   };
 
-  // --- FILTERING LOGIC ---
   const getFilteredInterns = () => {
     return interns.filter(intern => {
       const matchesDept = filterDept === "all" || intern.departmentId === filterDept;
@@ -184,52 +214,45 @@ function CorDash() {
     });
   };
 
-  // --- REUSABLE HEADER COMPONENT ---
-  const FilterHeader = ({ title, showDeptFilter = true, rightAction = null }) => (
-    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-      <h3 className="text-xl font-bold text-sidebar-text">{title}</h3>
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative">
-          <SearchIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-sidebar-muted" />
-          <input type="text" placeholder="Search..." className="pl-10 pr-4 py-2 border-[1.5px] border-sidebar-border rounded-xl focus:ring-2 focus:ring-brand-pastel focus:border-brand-primary outline-none w-full sm:w-64 transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-        </div>
-        {showDeptFilter && (
-          <div className="relative">
-            <FilterIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-sidebar-muted" />
-            <select value={filterDept} onChange={(e) => setFilterDept(e.target.value)} className="pl-10 pr-8 py-2 border-[1.5px] border-sidebar-border rounded-xl focus:ring-2 focus:ring-brand-pastel focus:border-brand-primary outline-none appearance-none bg-white cursor-pointer hover:border-brand-pastel transition-all w-full sm:w-auto font-medium text-sidebar-text">
-              <option value="all">All Departments</option>
-              {COLLEGES.map((col) => (<option key={col.id} value={col.id}>{col.code} - {col.name}</option>))}
-            </select>
-          </div>
-        )}
-        {rightAction}
-      </div>
-    </div>
-  );
-
   const renderContent = () => {
     if (loading) return <div className="text-sidebar-muted animate-pulse font-semibold">Loading data...</div>;
 
     switch (activeTab) {
       case "overview":
+        if (showLogs) {
+          return (
+            <div className="animate-fadeIn">
+              <LogAtt user={user} onBack={() => setShowLogs(false)} />
+            </div>
+          );
+        }
         return (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fadeIn">
-            <div onClick={() => setActiveTab('supervisors')} className="bg-white p-6 rounded-3xl shadow-[0_2px_12px_rgba(66,165,255,0.08)] border-[1.5px] border-sidebar-border flex justify-between cursor-pointer hover:shadow-[0_4px_20px_rgba(66,165,255,0.15)] hover:border-yellow-200 transition-all group">
-              <div><p className="text-sm text-sidebar-muted font-bold">Total Supervisors</p><h3 className="text-3xl font-extrabold text-sidebar-text mt-1">{stats.supervisors}</h3></div>
-              <div className="p-3 rounded-2xl bg-yellow-100 text-yellow-600 group-hover:scale-105 transition-transform"><SupervisorIcon className="w-8 h-8" /></div>
+          <div className="space-y-6 animate-fadeIn">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div onClick={() => setActiveTab('supervisors')} className="bg-white p-6 rounded-3xl shadow-[0_2px_12px_rgba(66,165,255,0.08)] border-[1.5px] border-sidebar-border flex justify-between cursor-pointer hover:shadow-[0_4px_20px_rgba(66,165,255,0.15)] hover:border-yellow-200 transition-all group">
+                <div><p className="text-sm text-sidebar-muted font-bold">Total Supervisors</p><h3 className="text-3xl font-extrabold text-sidebar-text mt-1">{stats.supervisors}</h3></div>
+                <div className="p-3 rounded-2xl bg-yellow-100 text-yellow-600 group-hover:scale-105 transition-transform"><SupervisorIcon className="w-8 h-8" /></div>
+              </div>
+              <div onClick={() => setActiveTab('interns')} className="bg-white p-6 rounded-3xl shadow-[0_2px_12px_rgba(66,165,255,0.08)] border-[1.5px] border-sidebar-border flex justify-between cursor-pointer hover:shadow-[0_4px_20px_rgba(66,165,255,0.15)] hover:border-emerald-200 transition-all group">
+                <div><p className="text-sm text-sidebar-muted font-bold">Active Interns</p><h3 className="text-3xl font-extrabold text-sidebar-text mt-1">{stats.interns}</h3></div>
+                <div className="p-3 rounded-2xl bg-status-mint-bg text-status-mint-text group-hover:scale-105 transition-transform"><InternIcon className="w-8 h-8" /></div>
+              </div>
             </div>
-            <div onClick={() => setActiveTab('interns')} className="bg-white p-6 rounded-3xl shadow-[0_2px_12px_rgba(66,165,255,0.08)] border-[1.5px] border-sidebar-border flex justify-between cursor-pointer hover:shadow-[0_4px_20px_rgba(66,165,255,0.15)] hover:border-emerald-200 transition-all group">
-              <div><p className="text-sm text-sidebar-muted font-bold">Active Interns</p><h3 className="text-3xl font-extrabold text-sidebar-text mt-1">{stats.interns}</h3></div>
-              <div className="p-3 rounded-2xl bg-status-mint-bg text-status-mint-text group-hover:scale-105 transition-transform"><InternIcon className="w-8 h-8" /></div>
-            </div>
+            <InternOver user={user} onShowLogs={() => setShowLogs(true)} />
           </div>
         );
+        
       case "supervisors":
         const filteredSupervisors = supervisors.filter(s => (s.name || "").toLowerCase().includes(searchTerm.toLowerCase()) || (s.companyName || "").toLowerCase().includes(searchTerm.toLowerCase()));
         return (
           <div className="bg-white p-6 rounded-3xl shadow-[0_2px_12px_rgba(66,165,255,0.08)] border-[1.5px] border-sidebar-border animate-fadeIn">
             <FilterHeader 
-                title="All Supervisors" showDeptFilter={false}
+                title="All Supervisors" 
+                showDeptFilter={false}
+                searchTerm={searchTerm}
+                setSearchTerm={setSearchTerm}
+                filterDept={filterDept}
+                setFilterDept={setFilterDept}
                 rightAction={
                     <button onClick={() => setIsAddSupModalOpen(true)} className="flex items-center justify-center gap-2 bg-brand-primary hover:bg-brand-dark text-white px-5 py-2.5 rounded-xl transition-colors font-bold shadow-sm whitespace-nowrap">
                         <PlusIcon className="w-5 h-5" /><span className="hidden sm:inline">Add Supervisor</span>
@@ -260,11 +283,19 @@ function CorDash() {
             </div>
           </div>
         );
+        
       case "interns":
         const displayedInterns = getFilteredInterns();
         return (
           <div className="bg-white p-6 rounded-3xl shadow-[0_2px_12px_rgba(66,165,255,0.08)] border-[1.5px] border-sidebar-border animate-fadeIn">
-            <FilterHeader title="Managed Interns" showDeptFilter={true} />
+            <FilterHeader 
+              title="Managed Interns" 
+              showDeptFilter={true} 
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              filterDept={filterDept}
+              setFilterDept={setFilterDept}
+            />
             {filterDept !== 'all' && (<div className="mb-4"><span className="text-xs font-bold bg-brand-light text-brand-dark px-3 py-1.5 rounded-lg border border-brand-pastel">Filtering by: {getCollegeName(filterDept)}</span></div>)}
             <div className="overflow-hidden border border-sidebar-border rounded-2xl">
               <div className="overflow-x-auto">
@@ -295,6 +326,7 @@ function CorDash() {
             </div>
           </div>
         );
+        
       case "evaluations": return <EvaluationTab user={user} setActiveTab={setActiveTab} />;
       case "reports": return <ReportsTab user={user} setActiveTab={setActiveTab} />;
       default: return null;

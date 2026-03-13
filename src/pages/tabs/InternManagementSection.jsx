@@ -1,4 +1,4 @@
-// fileName: InternManagementSection.jsx (UPDATED: Responsive Layout & Text Truncation Fix)
+// fileName: InternManagementSection.jsx
 
 import React, { useState, useEffect } from "react";
 import { collection, query, where, getDocs, serverTimestamp, updateDoc, doc, getDoc } from "firebase/firestore";
@@ -62,7 +62,11 @@ const ProfileImage = ({ intern, size = "w-10 h-10" }) => {
   );
 };
 
-const ConfirmationModal = ({ intern, onConfirm, onCancel, isProcessing }) => {
+// --- SENIOR DEV FIX: DYNAMIC CONFIRMATION MODAL ---
+const ConfirmationModal = ({ intern, actionType, onConfirm, onCancel, isProcessing }) => {
+  if (!intern) return null;
+  
+  const isAssign = actionType === 'assign';
   const internName = `${intern.firstName || ''} ${intern.lastName || ''}`.trim();
   const internDisplayName = internName || intern.fullName || intern.name || intern.email;
   
@@ -70,18 +74,22 @@ const ConfirmationModal = ({ intern, onConfirm, onCancel, isProcessing }) => {
     <div className="fixed inset-0 bg-black/50 bg-opacity-75 flex items-center justify-center z-50 backdrop-blur-sm p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 animate-scale-in">
         <div className="flex justify-between items-start border-b pb-3 mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Unassign Intern</h3>
+          <h3 className="text-lg font-semibold text-gray-900">
+            {isAssign ? 'Assign Intern' : 'Unassign Intern'}
+          </h3>
           <button onClick={onCancel} className="text-gray-400 hover:text-gray-600">
             <X size={20} />
           </button>
         </div>
         <div className="mb-6">
           <p className="text-gray-700">
-            Are you sure you want to **unassign** <span className="font-bold text-red-600">{internDisplayName}</span> from your supervision?
+            Are you sure you want to {isAssign ? 'assign' : 'unassign'} <span className={`font-bold ${isAssign ? ACCENT_TEXT : 'text-red-600'}`}>{internDisplayName}</span> {isAssign ? 'to your team?' : 'from your supervision?'}
           </p>
-          <p className="text-sm text-gray-500 mt-2">
-            This action will make the intern available for other supervisors.
-          </p>
+          {!isAssign && (
+            <p className="text-sm text-gray-500 mt-2">
+              This action will make the intern available for other supervisors.
+            </p>
+          )}
         </div>
         <div className="flex justify-end gap-3">
           <button
@@ -94,15 +102,15 @@ const ConfirmationModal = ({ intern, onConfirm, onCancel, isProcessing }) => {
           <button
             onClick={onConfirm}
             disabled={isProcessing}
-            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+            className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 ${isAssign ? `${ACCENT_BG_BUTTON} ${ACCENT_BG_HOVER}` : 'bg-red-600 hover:bg-red-700'}`}
           >
             {isProcessing ? (
               <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                <span>Removing...</span>
+                <span>Processing...</span>
               </>
             ) : (
-              'Confirm Unassign'
+              isAssign ? 'Confirm Assign' : 'Confirm Unassign'
             )}
           </button>
         </div>
@@ -110,6 +118,7 @@ const ConfirmationModal = ({ intern, onConfirm, onCancel, isProcessing }) => {
     </div>
   );
 };
+// --------------------------------------------------
 
 const InternProfileModal = ({ intern, onClose }) => {
   const internName = `${intern.firstName || ''} ${intern.lastName || ''}`.trim();
@@ -185,12 +194,15 @@ function InternManagementSection({ user }) {
   const [myInterns, setMyInterns] = useState([]);
   const [availableInterns, setAvailableInterns] = useState([]);
   const [visibleCount, setVisibleCount] = useState(5);
-  const [addingIntern, setAddingIntern] = useState(null);
-  const [removingIntern, setRemovingIntern] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [internToUnassign, setInternToUnassign] = useState(null);
-  const [internToView, setInternToView] = useState(null);
+  
+  // --- SENIOR DEV FIX: Consolidated Action State ---
+  const [selectedInternForAction, setSelectedInternForAction] = useState(null);
+  const [actionType, setActionType] = useState(null); // 'assign' or 'unassign'
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
+  // -------------------------------------------------
 
+  const [internToView, setInternToView] = useState(null);
   const [filterDept, setFilterDept] = useState('');
   const [filterCourse, setFilterCourse] = useState('');
 
@@ -231,59 +243,51 @@ function InternManagementSection({ user }) {
     fetchInterns();
   }, [user.uid]);
 
-  const handleAddIntern = async (internUid) => {
-    setAddingIntern(internUid);
-    try {
-      const userDoc = await getDoc(doc(db, "users", user.uid));
-      const userData = userDoc.data();
-      
-      const supervisorName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() ||
-                             userData.fullName || userData.name || "Supervisor";
+  // --- SENIOR DEV FIX: Unified confirmation handler ---
+  const handleActionClick = (intern, type) => {
+    setSelectedInternForAction(intern);
+    setActionType(type);
+  };
 
-      const updateData = {
-        supervisorId: user.uid, supervisorName: supervisorName, assignedAt: serverTimestamp()
-      };
-      
-      await updateDoc(doc(db, "users", internUid), updateData);
-      
-      const internToMove = availableInterns.find(intern => intern.uid === internUid);
-      if (internToMove) {
-        const updatedIntern = { ...internToMove, ...updateData };
+  const confirmAction = async () => {
+    if (!selectedInternForAction || !actionType) return;
+    setIsProcessingAction(true);
+    const internUid = selectedInternForAction.uid;
+
+    try {
+      if (actionType === 'assign') {
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        const userData = userDoc.data();
+        const supervisorName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() ||
+                               userData.fullName || userData.name || "Supervisor";
+
+        const updateData = { supervisorId: user.uid, supervisorName: supervisorName, assignedAt: serverTimestamp() };
+        await updateDoc(doc(db, "users", internUid), updateData);
+        
+        const updatedIntern = { ...selectedInternForAction, ...updateData };
         setMyInterns(prev => [...prev, updatedIntern].sort((a, b) => getSortableName(a).localeCompare(getSortableName(b))));
         setAvailableInterns(prev => prev.filter(intern => intern.uid !== internUid));
-      }
-      toast.success("Intern assigned successfully!");
-    } catch (error) {
-      console.error("Error adding intern:", error);
-      toast.error("Failed to assign intern.");
-    } finally {
-      setAddingIntern(null);
-    }
-  };
+        toast.success("Intern assigned successfully!");
 
-  const confirmRemoveIntern = async () => {
-    const internUid = internToUnassign.uid;
-    setRemovingIntern(internUid);
-    setInternToUnassign(null);
-
-    try {
-      const updateData = { supervisorId: "", supervisorName: "", removedAt: serverTimestamp() };
-      await updateDoc(doc(db, "users", internUid), updateData);
-      
-      const internToMove = myInterns.find(intern => intern.uid === internUid);
-      if (internToMove) {
-        const resetIntern = { ...internToMove, supervisorId: "", supervisorName: "" };
+      } else if (actionType === 'unassign') {
+        const updateData = { supervisorId: "", supervisorName: "", removedAt: serverTimestamp() };
+        await updateDoc(doc(db, "users", internUid), updateData);
+        
+        const resetIntern = { ...selectedInternForAction, supervisorId: "", supervisorName: "" };
         setAvailableInterns(prev => [...prev, resetIntern].sort((a, b) => getSortableName(a).localeCompare(getSortableName(b))));
         setMyInterns(prev => prev.filter(intern => intern.uid !== internUid));
+        toast.success("Intern unassigned successfully.");
       }
-      toast.success("Intern unassigned successfully.");
     } catch (error) {
-      console.error("Error removing intern:", error);
-      toast.error("Failed to unassign intern.");
+      console.error(`Error processing ${actionType}:`, error);
+      toast.error(`Failed to ${actionType} intern.`);
     } finally {
-      setRemovingIntern(null);
+      setIsProcessingAction(false);
+      setSelectedInternForAction(null);
+      setActionType(null);
     }
   };
+  // --------------------------------------------------
 
   const handleDeptChange = (e) => {
     setFilterDept(e.target.value);
@@ -305,10 +309,17 @@ function InternManagementSection({ user }) {
   return (
     <div className="space-y-6">
       
-      {internToUnassign && (
+      {/* Dynamic Confirmation Modal */}
+      {selectedInternForAction && (
         <ConfirmationModal 
-          intern={internToUnassign} onConfirm={confirmRemoveIntern}
-          onCancel={() => setInternToUnassign(null)} isProcessing={removingIntern === internToUnassign.uid}
+          intern={selectedInternForAction} 
+          actionType={actionType}
+          onConfirm={confirmAction}
+          onCancel={() => {
+            setSelectedInternForAction(null);
+            setActionType(null);
+          }} 
+          isProcessing={isProcessingAction}
         />
       )}
 
@@ -386,7 +397,7 @@ function InternManagementSection({ user }) {
                 {filteredMyInterns.map((intern) => (
                   <div key={intern.uid} className="flex flex-col xl:flex-row xl:items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors gap-4 border border-transparent hover:border-gray-200">
                     
-                    {/* User Info Section - FIX APPLIED HERE */}
+                    {/* User Info Section */}
                     <div className="flex items-center gap-4 min-w-0 flex-1">
                       <ProfileImage intern={intern} />
                       <div className="min-w-0 flex-1">
@@ -422,15 +433,11 @@ function InternManagementSection({ user }) {
                         View
                       </button>
                       <button
-                        onClick={() => startRemoveIntern(intern)}
-                        disabled={removingIntern === intern.uid}
-                        className="flex-1 xl:flex-none px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-center flex justify-center items-center shadow-sm min-w-[90px]"
+                        // --- SENIOR DEV FIX: Routed through handleActionClick ---
+                        onClick={() => handleActionClick(intern, 'unassign')}
+                        className="flex-1 xl:flex-none px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors text-center shadow-sm min-w-[90px]"
                       >
-                        {removingIntern === intern.uid ? (
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        ) : (
-                          'Unassign'
-                        )}
+                        Unassign
                       </button>
                     </div>
                   </div>
@@ -476,7 +483,7 @@ function InternManagementSection({ user }) {
                   {visibleFilteredAvailableInterns.map((intern) => (
                     <div key={intern.uid} className="flex flex-col xl:flex-row xl:items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors gap-4 border border-transparent hover:border-gray-200">
                       
-                      {/* User Info Section - FIX APPLIED HERE */}
+                      {/* User Info Section */}
                       <div className="flex items-center gap-4 min-w-0 flex-1">
                         <ProfileImage intern={intern} />
                         <div className="min-w-0 flex-1">
@@ -512,20 +519,12 @@ function InternManagementSection({ user }) {
                           View
                         </button>
                         <button
-                          onClick={() => handleAddIntern(intern.uid)}
-                          disabled={addingIntern === intern.uid}
-                          className={`flex-1 xl:flex-none ${ACCENT_BG_BUTTON} ${ACCENT_BG_HOVER} px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm min-w-[90px]`}
+                          // --- SENIOR DEV FIX: Routed through handleActionClick ---
+                          onClick={() => handleActionClick(intern, 'assign')}
+                          className={`flex-1 xl:flex-none ${ACCENT_BG_BUTTON} ${ACCENT_BG_HOVER} px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm min-w-[90px]`}
                         >
-                          {addingIntern === intern.uid ? (
-                            <>
-                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                            </>
-                          ) : (
-                            <>
-                              <Plus size={16} />
-                              <span>Assign</span>
-                            </>
-                          )}
+                          <Plus size={16} />
+                          <span>Assign</span>
                         </button>
                       </div>
                     </div>

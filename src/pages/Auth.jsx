@@ -207,11 +207,11 @@ const Auth = () => {
   const initialState = {
     email: '', password: '', confirmPassword: '',
     firstName: '', lastName: '', phoneNumber: '',
-    school: 'The Lewis College', // Automatically populated to bypass input
+    school: 'The Lewis College', 
     departmentId: '', 
     course: '', 
     companyName: '',
-    department: '', 
+    internshipDepartment: '', // Replaced department with internshipDepartment
   };
   const [formData, setFormData] = useState(initialState);
 
@@ -235,7 +235,7 @@ const Auth = () => {
     { title: 'Account Setup', icon: <LockIcon />, fields: ['email', 'password', 'confirmPassword'] },
     { title: 'Personal Information', icon: <UserIcon />, fields: ['firstName', 'lastName', 'phoneNumber'] },
     { title: 'Educational Background', icon: <AcademicIcon />, fields: ['departmentId', 'course'] },
-    { title: 'Internship Details', icon: <OfficeIcon />, fields: ['companyName', 'department'] }
+    { title: 'Internship Details', icon: <OfficeIcon />, fields: ['companyName', 'internshipDepartment'] } // Updated key here
   ];
 
   const getCurrentSteps = () => {
@@ -334,10 +334,10 @@ const Auth = () => {
       });
       
       const userData = {
-        ...profileData,
+        ...profileData, // This spread now safely contains internshipDepartment instead of department
         email: email,
         createdAt: new Date(),
-        role: 'intern' // STRICTLY ENFORCED
+        role: 'intern' 
       };
       
       delete userData.confirmPassword;
@@ -574,7 +574,7 @@ const Auth = () => {
                       {currentStep === 3 && (
                          <>
                           <InputField name="companyName" value={formData.companyName} onChange={handleChange} placeholder="Company name" icon={<OfficeIcon />} disabled={isSigningUp} />
-                          <InputField name="department" value={formData.department} onChange={handleChange} placeholder="Department (Intern)" icon={<OfficeIcon />} disabled={isSigningUp} />
+                          <InputField name="internshipDepartment" value={formData.internshipDepartment} onChange={handleChange} placeholder="Department (Intern)" icon={<OfficeIcon />} disabled={isSigningUp} />
                         </>
                       )}
                     </div>

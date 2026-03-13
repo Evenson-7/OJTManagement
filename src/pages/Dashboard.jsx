@@ -11,10 +11,11 @@ import CorDash from "./CorDash";
 // --- LAYOUT ---
 import DashboardLayout from "../components/DashboardLayout";
 
-// --- TABS ---
+// --- TABS & COMPONENTS ---
 import OverviewTab from "../pages/tabs/OverviewTab";
 import ReportsTab from "../pages/tabs/ReportsTab";
 import EvaluationTab from "../pages/tabs/EvaluationTab";
+import LogAtt from "../components/logAtt"; // <-- ADDED LOGATT COMPONENT
 
 // --- ICONS ---
 import { OverviewIcon, ReportsIcon, MyReportsIcon } from "../components/Icons";
@@ -73,6 +74,7 @@ function Dashboard() {
       case "overview":   return <OverviewTab   {...props} />;
       case "reports":    return <ReportsTab    {...props} />;
       case "evaluation": return <EvaluationTab {...props} />;
+      case "logAtt":     return <LogAtt        {...props} />; // <-- ADDED LOGATT ROUTING
       default:           return <OverviewTab   {...props} />;
     }
   };

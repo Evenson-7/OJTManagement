@@ -1,9 +1,9 @@
 // fileName: AttendanceDTR.jsx
 import React, { useState, useEffect } from "react";
 import { collection, query, where, getDocs, doc, getDoc, orderBy } from "firebase/firestore";
-import { db } from "../../firebaseConfig"; // Double check your import path here
+import { db } from "../../firebaseConfig"; 
 import toast from "react-hot-toast";
-import { Calendar, Filter, Loader2, Printer, BarChart2, Download } from "lucide-react";
+import { Calendar, Filter, Loader2, Printer, BarChart2, Download, Clock } from "lucide-react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import jsPDF from "jspdf";
@@ -18,8 +18,6 @@ const COLORS = {
   btnPrimary: "bg-[#0094FF] hover:bg-[#002B66]",
 };
 
-const PRIMARY_FOCUS_RING = "focus:ring-[#0094FF] focus:border-[#0094FF]";
-
 const getLocalDateString = (date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -27,12 +25,24 @@ const getLocalDateString = (date) => {
   return `${year}-${month}-${day}`;
 };
 
+// --- STRICT FORMATTER: Always returns "Xh Ym" format ---
+const formatToHoursMinutes = (decimalHours) => {
+    const num = parseFloat(decimalHours);
+    if (isNaN(num)) return "--";
+    if (num <= 0) return "0h 0m";
+    
+    const hrs = Math.floor(num);
+    const mins = Math.round((num - hrs) * 60);
+    
+    return `${hrs}h ${mins}m`;
+};
+
 const printWebDTR = (internName, startDate, endDate, logs, supervisorName) => {
     const printWindow = window.open("", "_blank");
     const dateRange = `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`;
-    const totalHours = logs
-        .reduce((sum, log) => sum + (parseFloat(log.hoursWorked) || 0), 0)
-        .toFixed(2);
+    
+    const totalDecimal = logs.reduce((sum, log) => sum + (parseFloat(log.hoursWorked) || 0), 0);
+    const formattedTotal = formatToHoursMinutes(totalDecimal);
     
     const finalSupervisor = supervisorName && supervisorName !== "Unassigned" 
         ? supervisorName 
@@ -70,7 +80,7 @@ const printWebDTR = (internName, startDate, endDate, logs, supervisorName) => {
                 <div class="meta-box">
                     <span>NAME: ${internName}</span>
                     <span>PERIOD: ${dateRange}</span>
-                    <span>TOTAL: ${totalHours} HRS</span>
+                    <span>TOTAL: ${formattedTotal}</span>
                 </div>
                 <table>
                     <thead>
@@ -97,13 +107,14 @@ const printWebDTR = (internName, startDate, endDate, logs, supervisorName) => {
                             if (!timeDisplay && !isWeekend && !isAbsent) timeDisplay = "";
 
                             const rowClass = isWeekend ? "weekend" : isAbsent ? "absent" : "";
+                            const formattedTime = log.hoursWorked > 0 ? formatToHoursMinutes(log.hoursWorked) : "";
 
                             return `
                                 <tr class="${rowClass}">
                                     <td>${dayNum}</td>
                                     <td style="text-align: left; padding-left: 10px;">${dayName}</td>
                                     <td class="time-text">${timeDisplay}</td>
-                                    <td style="font-weight: bold;">${log.hoursWorked > 0 ? log.hoursWorked : ""}</td>
+                                    <td style="font-weight: bold;">${formattedTime}</td>
                                     <td>${log.status}</td>
                                 </tr>
                             `;
@@ -128,7 +139,9 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
   const [selectedInternId, setSelectedInternId] = useState(isManager ? "" : user.uid);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
+  
   const [tracedSupervisorName, setTracedSupervisorName] = useState("Unassigned");
+  const [allTimeStats, setAllTimeStats] = useState({ required: 0, completed: 0 });
 
   useEffect(() => {
     if (isManager && interns.length > 0 && !selectedInternId) {
@@ -137,26 +150,46 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
   }, [isManager, interns, selectedInternId]);
 
   useEffect(() => {
-    const traceSupervisor = async () => {
+    const fetchInternDetails = async () => {
       setTracedSupervisorName("Loading...");
-      if (user.role === "supervisor") {
+      setAllTimeStats({ required: 0, completed: 0 }); 
+
+      if (user.role === "supervisor" && !selectedInternId) {
         const myName = user.firstName ? `${user.firstName} ${user.lastName}` : user.name || "Unassigned";
         setTracedSupervisorName(myName);
         return;
       }
-      if (selectedInternId) {
+
+      const targetId = selectedInternId || user.uid;
+      
+      if (targetId) {
         try {
-          const internRef = doc(db, "users", selectedInternId);
+          const internRef = doc(db, "users", targetId);
           const internSnap = await getDoc(internRef);
+          let required = 0;
+          
           if (internSnap.exists()) {
             const internData = internSnap.data();
             setTracedSupervisorName(internData.supervisorName || "Unassigned"); 
+            required = internData.requiredHours || 0;
           }
-        } catch (error) { console.error(error); }
+
+          const q = query(collection(db, "attendance"), where("internId", "==", targetId));
+          const attendanceSnap = await getDocs(q);
+          let totalCompleted = 0;
+          
+          attendanceSnap.forEach(doc => {
+            const hw = doc.data().hoursWorked;
+            if (hw) totalCompleted += parseFloat(hw);
+          });
+
+          setAllTimeStats({ required, completed: totalCompleted });
+
+        } catch (error) { console.error("Error fetching intern stats:", error); }
       }
     };
-    traceSupervisor();
-  }, [selectedInternId, user.role]);
+    fetchInternDetails();
+  }, [selectedInternId, user.role, user.uid]);
 
   const iName = isManager ? interns.find((i) => i.id === selectedInternId)?.name || "Intern" : user.firstName ? `${user.firstName} ${user.lastName}` : user.name;
 
@@ -164,9 +197,13 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
     printWebDTR(iName, startDate, endDate, logs, tracedSupervisorName);
   };
 
+  // --- PDF EXPORT FIX: Added setTimeOut to allow DOM paint before canvas capture ---
   const handleExportPDF = () => {
     const element = document.createElement("div");
     
+    const totalDecimal = logs.reduce((sum, log) => sum + (parseFloat(log.hoursWorked) || 0), 0);
+    const formattedTotal = formatToHoursMinutes(totalDecimal);
+
     element.innerHTML = `
       <div style="width: 210mm; min-height: 297mm; padding: 10mm; font-family: Arial, sans-serif; background: white; color: black; box-sizing: border-box; display: flex; flex-direction: column;">
         <div style="text-align: center; margin-bottom: 20px;">
@@ -177,7 +214,7 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
         <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 11px; font-weight: 700; border: 1px solid black; padding: 8px; background-color: #f3f4f6;">
            <span>NAME: ${iName}</span>
            <span>PERIOD: ${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}</span>
-           <span>TOTAL: ${logs.reduce((sum, log) => sum + (parseFloat(log.hoursWorked) || 0), 0).toFixed(2)} HRS</span>
+           <span>TOTAL: ${formattedTotal}</span>
         </div>
         <table style="width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; flex-grow: 1;">
            <thead>
@@ -204,13 +241,14 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
                   const color = isWeekend ? "#9ca3af" : isAbsent ? "#dc2626" : "black";
                   const weight = isAbsent ? "bold" : "normal";
                   const style = isWeekend ? "italic" : "normal";
+                  const formattedTime = log.hoursWorked > 0 ? formatToHoursMinutes(log.hoursWorked) : '';
 
                   return `
                     <tr style="background-color: ${bg}; color: ${color}; font-weight: ${weight}; font-style: ${style};">
                        <td style="border: 1px solid black; padding: 0 4px; text-align: center; height: 26px;">${d.getDate()}</td>
                        <td style="border: 1px solid black; padding: 0 4px 0 10px; text-align: left;">${d.toLocaleDateString('en-US', {weekday:'long'})}</td>
                        <td style="border: 1px solid black; padding: 0 4px; text-align: center; font-family: monospace; font-size: 10px; font-weight: 600; color: black;">${time}</td>
-                       <td style="border: 1px solid black; padding: 0 4px; text-align: center; font-weight: bold; color: black;">${log.hoursWorked > 0 ? log.hoursWorked : ''}</td>
+                       <td style="border: 1px solid black; padding: 0 4px; text-align: center; font-weight: bold; color: black;">${formattedTime}</td>
                        <td style="border: 1px solid black; padding: 0 4px; text-align: center;">${log.status}</td>
                     </tr>
                   `;
@@ -232,41 +270,45 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
       </div>
     `;
     
+    // Safely position out of viewport so html2canvas can still capture it
     element.style.position = "absolute";
-    element.style.top = "0";
-    element.style.left = "-9999px";
+    element.style.top = "200vh";
+    element.style.left = "0";
     document.body.appendChild(element);
 
     toast.loading("Generating PDF...", { id: "dtr_pdf" });
 
-    html2canvas(element, { scale: 2, useCORS: true }).then((canvas) => {
-        document.body.removeChild(element);
-        const imgData = canvas.toDataURL("image/png");
-        const pdf = new jsPDF("p", "mm", "a4");
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
-        const imgProps = pdf.getImageProperties(imgData);
-        const imgRatio = imgProps.width / imgProps.height;
-        
-        let finalWidth = pdfWidth;
-        let finalHeight = pdfWidth / imgRatio;
+    // Give browser 150ms to paint the DOM element before capturing
+    setTimeout(() => {
+        html2canvas(element, { scale: 2, useCORS: true }).then((canvas) => {
+            document.body.removeChild(element);
+            const imgData = canvas.toDataURL("image/png");
+            const pdf = new jsPDF("p", "mm", "a4");
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const imgProps = pdf.getImageProperties(imgData);
+            const imgRatio = imgProps.width / imgProps.height;
+            
+            let finalWidth = pdfWidth;
+            let finalHeight = pdfWidth / imgRatio;
 
-        if (finalHeight > pdfHeight) {
-            finalHeight = pdfHeight;
-            finalWidth = finalHeight * imgRatio;
-        }
+            if (finalHeight > pdfHeight) {
+                finalHeight = pdfHeight;
+                finalWidth = finalHeight * imgRatio;
+            }
 
-        const xOffset = (pdfWidth - finalWidth) / 2;
-        pdf.addImage(imgData, "PNG", xOffset, 0, finalWidth, finalHeight);
-        pdf.save(`DTR_${iName.replace(/\s+/g, "_")}.pdf`);
-        toast.dismiss("dtr_pdf");
-        toast.success("PDF Downloaded!");
-    }).catch(err => {
-        console.error(err);
-        if(document.body.contains(element)) document.body.removeChild(element);
-        toast.dismiss("dtr_pdf");
-        toast.error("Export Failed");
-    });
+            const xOffset = (pdfWidth - finalWidth) / 2;
+            pdf.addImage(imgData, "PNG", xOffset, 0, finalWidth, finalHeight);
+            pdf.save(`DTR_${iName.replace(/\s+/g, "_")}.pdf`);
+            toast.dismiss("dtr_pdf");
+            toast.success("PDF Downloaded!");
+        }).catch(err => {
+            console.error(err);
+            if(document.body.contains(element)) document.body.removeChild(element);
+            toast.dismiss("dtr_pdf");
+            toast.error("Export Failed");
+        });
+    }, 150);
   };
 
   const generateReport = async () => {
@@ -311,6 +353,8 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
     } catch (error) { console.error(error); toast.error("Failed to load attendance."); } finally { setLoading(false); }
   };
 
+  const remainingHours = Math.max(allTimeStats.required - allTimeStats.completed, 0);
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm animate-fadeIn relative">
       <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -343,9 +387,27 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
                 </select>
             </div>
             )}
-            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Start Date</label><DatePicker selected={startDate} onChange={(date) => setStartDate(date)} dateFormat="MMM d, yyyy" className={`w-full p-2.5 border border-gray-300 rounded-lg text-sm bg-white shadow-sm outline-none focus:ring-2 focus:ring-[#0094FF]`} /></div>
-            <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">End Date</label><DatePicker selected={endDate} onChange={(date) => setEndDate(date)} dateFormat="MMM d, yyyy" className={`w-full p-2.5 border border-gray-300 rounded-lg text-sm bg-white shadow-sm outline-none focus:ring-2 focus:ring-[#0094FF]`} /></div>
-            <div className="flex items-end"><button onClick={generateReport} disabled={loading} className={`w-full py-2.5 text-white rounded-lg text-sm font-bold shadow-sm flex items-center justify-center gap-2 ${COLORS.btnPrimary}`}>{loading ? <Loader2 className="animate-spin" size={16} /> : <Filter size={16} />} Load Records</button></div>
+            <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Start Date</label>
+                <DatePicker selected={startDate} onChange={(date) => setStartDate(date)} dateFormat="MMM d, yyyy" className={`w-full p-2.5 border border-gray-300 rounded-lg text-sm bg-white shadow-sm outline-none focus:ring-2 focus:ring-[#0094FF]`} />
+            </div>
+            <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">End Date</label>
+                <DatePicker selected={endDate} onChange={(date) => setEndDate(date)} dateFormat="MMM d, yyyy" className={`w-full p-2.5 border border-gray-300 rounded-lg text-sm bg-white shadow-sm outline-none focus:ring-2 focus:ring-[#0094FF]`} />
+            </div>
+            
+            <div className="flex flex-col md:flex-row items-end gap-3 justify-end h-full">
+                <div className="flex-1 w-full bg-blue-50 border border-blue-100 rounded-lg flex flex-col justify-center px-4 py-1.5 shadow-sm h-[42px] min-w-[120px]">
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider leading-tight">Remaining</span>
+                    <span className="text-[15px] font-black text-[#002B66] leading-tight flex items-center gap-1">
+                        <Clock size={12} className="text-[#0094FF] mb-0.5" />
+                        {allTimeStats.required > 0 ? formatToHoursMinutes(remainingHours) : "Not Set"}
+                    </span>
+                </div>
+                <button onClick={generateReport} disabled={loading} className={`w-full md:w-auto px-5 h-[42px] text-white rounded-lg text-sm font-bold shadow-sm flex items-center justify-center gap-2 ${COLORS.btnPrimary}`}>
+                    {loading ? <Loader2 className="animate-spin" size={16} /> : <Filter size={16} />} Load Records
+                </button>
+            </div>
         </div>
 
         {logs.length > 0 ? (
@@ -386,7 +448,9 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
                                 </div>
                             )}
                         </td>
-                        <td className="px-6 py-4 text-center font-mono font-bold text-[#0094FF]">{log.hoursWorked > 0 ? log.hoursWorked : "-"}</td>
+                        <td className="px-6 py-4 text-center font-mono font-bold text-[#0094FF]">
+                            {log.hoursWorked > 0 ? formatToHoursMinutes(log.hoursWorked) : "-"}
+                        </td>
                         <td className="px-6 py-4 text-right"><span className={`px-2.5 py-1 rounded-full text-[10px] uppercase font-bold tracking-wider ${log.status === "Present" ? "bg-green-100 text-green-700" : log.status === "Absent" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-500"}`}>{log.status}</span></td>
                     </tr>
                     );
