@@ -5,7 +5,7 @@ import { db } from '../../../firebaseConfig';
 import { Toaster } from 'react-hot-toast'; 
 import InternManagementSection from './InternManagementSection';
 import InternOver from '../../components/InternOver'; 
-import LogAtt from '../../components/logAtt'; 
+import LogAttendance from '../../components/LogAttendance'; 
 
 // --- UTILITY FUNCTIONS FOR INTERN MATH ---
 const formatDecimalHours = (decimalValue) => {
@@ -99,7 +99,7 @@ function OverviewTab({ user, setActiveTab }) {
       {/* --- RENDER LOGS OR DASHBOARD BASED ON STATE --- */}
       {showLogs ? (
         <div className="animate-fadeIn">
-          <LogAtt user={user} onBack={() => setShowLogs(false)} />
+          <LogAttendance user={user} onBack={() => setShowLogs(false)} />
         </div>
       ) : (
         <>

@@ -73,7 +73,6 @@ function Dashboard() {
       case "overview":   return <OverviewTab   {...props} />;
       case "reports":    return <ReportsTab    {...props} />;
       case "evaluation": return <EvaluationTab {...props} />;
-      case "logAtt":     return <LogAtt        {...props} />; // <-- ADDED LOGATT ROUTING
       default:           return <OverviewTab   {...props} />;
     }
   };

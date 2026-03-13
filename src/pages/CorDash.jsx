@@ -14,7 +14,7 @@ import DashboardLayout from "../components/DashboardLayout";
 import ReportsTab from "./tabs/ReportsTab";
 import EvaluationTab from "./tabs/EvaluationTab";
 import InternOver from "../components/InternOver"; 
-import LogAtt from "../components/LogAtt";         
+import LogAttendance from "../components/LogAttendance";         
 
 // --- DATA CONSTANTS ---
 const COLLEGES = [
@@ -222,7 +222,7 @@ function CorDash() {
         if (showLogs) {
           return (
             <div className="animate-fadeIn">
-              <LogAtt user={user} onBack={() => setShowLogs(false)} />
+              <LogAttendance user={user} onBack={() => setShowLogs(false)} />
             </div>
           );
         }
