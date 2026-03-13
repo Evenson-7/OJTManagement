@@ -15,7 +15,7 @@ import DashboardLayout from "../components/DashboardLayout";
 import OverviewTab from "../pages/tabs/OverviewTab";
 import ReportsTab from "../pages/tabs/ReportsTab";
 import EvaluationTab from "../pages/tabs/EvaluationTab";
-import LogAtt from "../components/logAtt"; // <-- ADDED LOGATT COMPONENT
+import LogAtt from "../../components/LogAtt"; // <-- ADDED LOGATT COMPONENT
 
 // --- ICONS ---
 import { OverviewIcon, ReportsIcon, MyReportsIcon } from "../components/Icons";
