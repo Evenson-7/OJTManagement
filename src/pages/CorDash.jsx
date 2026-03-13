@@ -14,7 +14,7 @@ import DashboardLayout from "../components/DashboardLayout";
 import ReportsTab from "./tabs/ReportsTab";
 import EvaluationTab from "./tabs/EvaluationTab";
 import InternOver from "../components/InternOver"; 
-import LogAtt from "../../components/LogAtt";         
+import LogAtt from "../components/LogAtt";         
 
 // --- DATA CONSTANTS ---
 const COLLEGES = [

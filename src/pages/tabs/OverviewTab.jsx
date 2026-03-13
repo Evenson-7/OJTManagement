@@ -5,7 +5,7 @@ import { db } from '../../../firebaseConfig';
 import { Toaster } from 'react-hot-toast'; 
 import InternManagementSection from './InternManagementSection';
 import InternOver from '../../components/InternOver'; 
-import LogAtt from '../components/LogAtt'; 
+import LogAtt from '../../components/LogAtt'; 
 
 // --- UTILITY FUNCTIONS FOR INTERN MATH ---
 const formatDecimalHours = (decimalValue) => {
