@@ -81,6 +81,24 @@ const InternRosterSection = ({ data, handlers, user }) => {
         return internCourse === selectedCourse;
     });
 
+    const ComputeModalCard = ({ internEvals, internUid }) => (
+        <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 shadow-sm mt-3 w-full">
+            <h4 className="font-bold text-[#002B66] mb-3 border-b border-blue-200 pb-2">Select Valid Evaluations</h4>
+            <div className="space-y-2 mb-4">
+                {internEvals.map(ev => (
+                    <label key={ev.id} className="flex items-center gap-3 p-2 bg-white rounded cursor-pointer border border-transparent hover:border-gray-200 transition-colors">
+                        <input type="checkbox" checked={selectedEvals.includes(ev.id)} onChange={() => toggleEvalSelection(ev.id)} className="w-4 h-4 text-[#0094FF] rounded focus:ring-[#0094FF]" />
+                        <span className="font-medium text-gray-800 flex-1">{ev.evaluationType}</span>
+                        <span className="font-bold text-[#0094FF]">Score: {translateFinalGrade(ev.overallScore, ev.savedTemplateSnapshot?.gradingFormat)}</span>
+                    </label>
+                ))}
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-blue-200">
+                <button onClick={() => confirmOfficialGrade(internUid)} className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg shadow hover:bg-green-700 transition-colors text-sm w-full md:w-auto">Stamp Official Grade</button>
+            </div>
+        </div>
+    );
+
     return (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm animate-fadeIn">
             <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -89,7 +107,7 @@ const InternRosterSection = ({ data, handlers, user }) => {
                     <select
                         value={selectedCourse}
                         onChange={(e) => setSelectedCourse(e.target.value)}
-                        className="text-sm border border-gray-300 rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-[#0094FF] bg-white shadow-sm font-medium text-gray-700 cursor-pointer"
+                        className="w-full md:w-auto text-sm border border-gray-300 rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-[#0094FF] bg-white shadow-sm font-medium text-gray-700 cursor-pointer"
                     >
                         <option value="All">All Programs / Courses</option>
                         {uniqueCourses.map(course => (
@@ -98,7 +116,70 @@ const InternRosterSection = ({ data, handlers, user }) => {
                     </select>
                 )}
             </div>
-            <div className="overflow-x-auto">
+
+            {/* Mobile Card View */}
+            <div className="block md:hidden p-4 space-y-4">
+                {filteredInterns.map((intern) => {
+                    const internEvals = data.allEvaluations.filter(e => e.internId === intern.uid && (e.status === 'submitted' || e.status === 'completed'));
+                    const isComputing = activeComputeModal === intern.uid;
+                    const assignedSup = data.supervisors?.find(s => s.uid === intern.supervisorId);
+                    const isFinished = intern.internshipStatus === "Finished";
+                    const latestEval = [...internEvals].sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0];
+
+                    return (
+                        <div key={intern.uid} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm flex flex-col">
+                            <div className="flex justify-between items-start mb-3">
+                                <div>
+                                    <h4 className="font-bold text-gray-900 text-lg">{intern.name || `${intern.firstName} ${intern.lastName}`}</h4>
+                                    {(intern.course || intern.program) && <div className="text-xs text-gray-500 font-medium uppercase mt-0.5">{intern.course || intern.program}</div>}
+                                </div>
+                                <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-1 rounded-full">{internEvals.length} Forms</span>
+                            </div>
+
+                            <div className="text-sm text-gray-700 mb-4 bg-gray-50 p-2 rounded">
+                                <span className="font-bold block text-xs text-gray-500 uppercase mb-1">Supervisor</span>
+                                {assignedSup ? `${assignedSup.name || `${assignedSup.firstName} ${assignedSup.lastName}`} (${assignedSup.companyName || 'N/A'})` : <span className="text-gray-400 italic">Unassigned</span>}
+                            </div>
+
+                            <div className="flex flex-col gap-3">
+                                {isCoordinator && (
+                                    <select 
+                                        value={intern.internshipStatus || "Active"} 
+                                        onChange={(e) => handlers.handleChangeInternStatus(intern.uid, e.target.value)} 
+                                        className={`w-full text-sm font-bold px-3 py-2 rounded outline-none cursor-pointer transition-colors shadow-sm border ${intern.internshipStatus === "Finished" ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-700 border-gray-200"}`}
+                                    >
+                                        <option value="Active">Active (In Progress)</option>
+                                        {internEvals.length > 0 && <option value="Finished">Finished (Ready for Cert)</option>}
+                                    </select>
+                                )}
+
+                                <div className="flex flex-wrap gap-2">
+                                    {isFinished && latestEval && (
+                                        <button onClick={() => handlers.handleViewCertificate(latestEval)} className="flex-1 py-2 text-xs bg-yellow-500 text-white rounded-lg font-bold shadow flex justify-center items-center gap-1.5"><FaMedal /> Cert</button>
+                                    )}
+                                    {isCoordinator && (
+                                        <button onClick={() => isComputing ? setActiveComputeModal(null) : openCalculator(intern.uid)} className={`flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-colors ${isComputing ? "bg-red-100 text-red-600" : "bg-[#0094FF] text-white"}`}>
+                                            <HiOutlineCalculator className="w-4 h-4" /> {isComputing ? "Cancel" : "Compute"}
+                                        </button>
+                                    )}
+                                </div>
+                                
+                                {isCoordinator && intern.officialFinalGrade && (
+                                    <div className="text-center text-sm font-black text-[#0094FF] bg-blue-50 p-2 rounded border border-blue-100">
+                                        Official Grade: {intern.officialFinalGrade}
+                                    </div>
+                                )}
+                            </div>
+                            
+                            {isComputing && <ComputeModalCard internEvals={internEvals} internUid={intern.uid} />}
+                        </div>
+                    );
+                })}
+                {filteredInterns.length === 0 && <div className="text-center py-8 text-gray-500 italic border border-dashed rounded-lg">No interns found.</div>}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
                 <table className="w-full">
                     <thead className="bg-gray-50">
                         <tr>
@@ -116,7 +197,6 @@ const InternRosterSection = ({ data, handlers, user }) => {
                             const isComputing = activeComputeModal === intern.uid;
                             const assignedSup = data.supervisors?.find(s => s.uid === intern.supervisorId);
                             const isFinished = intern.internshipStatus === "Finished";
-                            
                             const latestEval = [...internEvals].sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0];
 
                             return (
@@ -148,9 +228,7 @@ const InternRosterSection = ({ data, handlers, user }) => {
                                                     className={`text-xs font-bold px-3 py-1.5 rounded outline-none cursor-pointer transition-colors shadow-sm border ${intern.internshipStatus === "Finished" ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-white"}`}
                                                 >
                                                     <option value="Active">Active (In Progress)</option>
-                                                    {internEvals.length > 0 && (
-                                                        <option value="Finished">Finished (Ready for Cert)</option>
-                                                    )}
+                                                    {internEvals.length > 0 && <option value="Finished">Finished (Ready for Cert)</option>}
                                                 </select>
                                             </td>
                                         )}
@@ -188,21 +266,7 @@ const InternRosterSection = ({ data, handlers, user }) => {
                                     {isComputing && (
                                         <tr>
                                             <td colSpan="6" className="px-6 py-4 bg-blue-50/50 border-b border-blue-100">
-                                                <div className="p-4 bg-white rounded-lg border border-blue-200 shadow-sm max-w-2xl">
-                                                    <h4 className="font-bold text-[#002B66] mb-3 border-b pb-2">Select Valid Evaluations to Compute</h4>
-                                                    <div className="space-y-2 mb-4">
-                                                        {internEvals.map(ev => (
-                                                            <label key={ev.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer border border-transparent hover:border-gray-200 transition-colors">
-                                                                <input type="checkbox" checked={selectedEvals.includes(ev.id)} onChange={() => toggleEvalSelection(ev.id)} className="w-4 h-4 text-[#0094FF] rounded focus:ring-[#0094FF]" />
-                                                                <span className="font-medium text-gray-800 flex-1">{ev.evaluationType}</span>
-                                                                <span className="font-bold text-[#0094FF]">Score: {translateFinalGrade(ev.overallScore, ev.savedTemplateSnapshot?.gradingFormat)}</span>
-                                                            </label>
-                                                        ))}
-                                                    </div>
-                                                    <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-                                                        <button onClick={() => confirmOfficialGrade(intern.uid)} className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg shadow hover:bg-green-700 transition-colors">Stamp Official Grade</button>
-                                                    </div>
-                                                </div>
+                                                <ComputeModalCard internEvals={internEvals} internUid={intern.uid} />
                                             </td>
                                         </tr>
                                     )}
@@ -222,31 +286,76 @@ const InternRosterSection = ({ data, handlers, user }) => {
 };
 
 const TemplateBuilder = ({ template, handlers }) => {
-    const { addSection, removeSection, updateSectionTitle, addQuestion, removeQuestion, updateQuestionText, addEssay, removeEssay, updateEssayText, updateTemplateTitle, handleSaveCustomTemplate, setActiveView } = handlers;
+    const { addSection, removeSection, updateSectionTitle, addQuestion, removeQuestion, updateQuestionText, addEssay, removeEssay, updateEssayText, updateTemplateTitle, updateTemplateGradingFormat, handleSaveCustomTemplate, setActiveView } = handlers;
+    
     return (
-      <div className="space-y-8 bg-white p-8 rounded-xl border border-gray-200 shadow-sm max-w-5xl mx-auto animate-fadeIn">
-        <div className="flex justify-between items-center border-b pb-6">
-            <div>
-                <input type="text" value={template.title} onChange={(e) => updateTemplateTitle(e.target.value)} className="text-3xl font-black text-[#002B66] bg-transparent border-b-2 border-transparent focus:border-[#0094FF] outline-none px-2 w-full" placeholder="Enter Custom Template Name..." />
-                <p className="text-gray-500 mt-2 px-2">Build a custom evaluation form for your department.</p>
+      <div className="space-y-8 bg-white p-4 md:p-8 rounded-xl border border-gray-200 shadow-sm w-full max-w-5xl mx-auto animate-fadeIn">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-6 gap-4">
+            <div className="w-full">
+                <input type="text" value={template.title} onChange={(e) => updateTemplateTitle(e.target.value)} className="text-2xl md:text-3xl font-black text-[#002B66] bg-transparent border-b-2 border-transparent focus:border-[#0094FF] outline-none px-2 w-full" placeholder="Enter Custom Template Name..." />
+                <p className="text-gray-500 mt-2 px-2 text-sm md:text-base">Build a custom evaluation form for your department.</p>
             </div>
-            <button onClick={() => setActiveView("dashboard")} className="text-sm bg-gray-100 text-gray-600 hover:bg-gray-200 px-4 py-2 rounded-lg font-medium transition-colors">Cancel</button>
+            <button onClick={() => setActiveView("dashboard")} className="w-full md:w-auto text-sm bg-gray-100 text-gray-600 hover:bg-gray-200 px-4 py-2 rounded-lg font-medium transition-colors shrink-0">Cancel</button>
         </div>
+
+        <div className="bg-blue-50/50 p-4 md:p-6 rounded-xl border border-blue-100">
+            <label className="block text-sm font-bold text-[#002B66] mb-2">Department Grading Mechanics</label>
+            <p className="text-xs text-gray-500 mb-3">Select the grading scale this template will use to compute the final score.</p>
+            <select
+                value={template.gradingFormat || "CTE_5_POINT"}
+                onChange={(e) => updateTemplateGradingFormat(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-[#0094FF] bg-white cursor-pointer shadow-sm font-medium text-gray-800"
+            >
+                <option value="CSS_LETTER">CCS Format (Letter Grade Matrix: E, A, S, N, P)</option>
+                <option value="CTE_5_POINT">CTE Format (5-Point Scale)</option>
+                <option value="CBE_100_POINT">CBE Format (100-Point Scale)</option>
+            </select>
+        </div>
+
         <div className="space-y-6">
           {template.sections.length === 0 ? <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg"><p className="text-gray-500">Empty Form.</p></div> : template.sections.map((section, sIndex) => (
-              <div key={section.id} className="bg-gray-50 p-6 rounded-xl border border-gray-200">
-                <div className="flex items-center gap-3 mb-4"><div className="bg-[#002B66] text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shrink-0">{sIndex + 1}</div><input type="text" value={section.title} onChange={(e) => updateSectionTitle(section.id, e.target.value)} className="flex-1 text-lg font-bold bg-transparent border-b-2 border-transparent focus:border-blue-500 outline-none px-2" placeholder="Section Title (e.g., I. BEHAVIOR AT WORK)" /><button onClick={() => removeSection(section.id)} className="text-gray-400 hover:text-red-500 p-2"><HiOutlineTrash className="w-5 h-5" /></button></div>
-                <div className="pl-11 space-y-3">{section.items.map((item, qIndex) => (<div key={item.id} className="flex items-center gap-3"><span className="text-gray-400 text-xs w-4 text-right">{qIndex + 1}.</span><input type="text" value={item.text} onChange={(e) => updateQuestionText(section.id, item.id, e.target.value)} className="flex-1 p-3 border border-gray-200 rounded-lg bg-white outline-none text-sm" placeholder="Grading criterion..." /><button onClick={() => removeQuestion(section.id, item.id)} className="text-gray-300 hover:text-red-500"><HiOutlineTrash className="w-4 h-4" /></button></div>))}
-                <button onClick={() => addQuestion(section.id)} className="mt-2 text-sm text-[#0094FF] font-medium flex items-center gap-1 hover:underline"><HiOutlinePlus className="w-4 h-4" /> Add Criteria</button></div>
+              <div key={section.id} className="bg-gray-50 p-4 md:p-6 rounded-xl border border-gray-200 overflow-hidden">
+                <div className="flex flex-col md:flex-row items-start md:items-center gap-3 mb-4">
+                    <div className="flex items-center gap-3 w-full">
+                        <div className="bg-[#002B66] text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shrink-0">{sIndex + 1}</div>
+                        <input type="text" value={section.title} onChange={(e) => updateSectionTitle(section.id, e.target.value)} className="flex-1 text-base md:text-lg font-bold bg-transparent border-b-2 border-transparent focus:border-blue-500 outline-none px-2 w-full" placeholder="Section Title (e.g., I. BEHAVIOR AT WORK)" />
+                        <button onClick={() => removeSection(section.id)} className="text-gray-400 hover:text-red-500 p-2 shrink-0"><HiOutlineTrash className="w-5 h-5" /></button>
+                    </div>
+                </div>
+                
+                <div className="pl-0 md:pl-11 space-y-3">
+                    {section.items.map((item, qIndex) => (
+                        <div key={item.id} className="flex items-center gap-2 md:gap-3">
+                            <span className="text-gray-400 text-xs w-4 text-right hidden md:block">{qIndex + 1}.</span>
+                            <input type="text" value={item.text} onChange={(e) => updateQuestionText(section.id, item.id, e.target.value)} className="flex-1 p-2 md:p-3 border border-gray-200 rounded-lg bg-white outline-none text-sm w-full" placeholder="Grading criterion..." />
+                            <button onClick={() => removeQuestion(section.id, item.id)} className="text-gray-300 hover:text-red-500 shrink-0 p-2"><HiOutlineTrash className="w-4 h-4" /></button>
+                        </div>
+                    ))}
+                    <button onClick={() => addQuestion(section.id)} className="mt-2 text-sm text-[#0094FF] font-medium flex items-center gap-1 hover:underline"><HiOutlinePlus className="w-4 h-4" /> Add Criteria</button>
+                </div>
               </div>
           ))}
           <button onClick={addSection} className="w-full py-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:bg-blue-50 hover:text-[#0094FF] hover:border-[#0094FF] transition-colors flex justify-center items-center gap-2"><HiOutlinePlus className="w-5 h-5" /> Add New Grading Section</button>
         </div>
-        <div className="border-t pt-8 mt-8"><h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2"><HiOutlineDocumentText className="text-[#0094FF]" /> Essay Questions</h3><div className="space-y-4">{template.essays.map((essay, eIndex) => (<div key={essay.id} className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 flex items-center gap-3"><span className="text-[#0094FF] font-bold text-sm">Q{eIndex + 1}</span><input type="text" value={essay.question} onChange={(e) => updateEssayText(essay.id, e.target.value)} className="flex-1 p-2 bg-white border border-gray-200 rounded outline-none" placeholder="Essay question..." /><button onClick={() => removeEssay(essay.id)} className="text-gray-400 hover:text-red-500"><HiOutlineTrash className="w-4 h-4" /></button></div>))}</div><button onClick={addEssay} className="mt-3 text-sm text-[#0094FF] font-medium flex items-center gap-1 hover:underline"><HiOutlinePlus className="w-4 h-4" /> Add Essay Question</button></div>
-        <div className="sticky bottom-0 bg-white border-t border-gray-100 pt-4 pb-2 mt-8 flex justify-end">
-            <button onClick={handleSaveCustomTemplate} className="bg-[#0094FF] text-white px-8 py-3 rounded-lg font-bold shadow-lg hover:bg-[#002B66] transition-colors flex items-center gap-2">
+
+        <div className="border-t pt-8 mt-8">
+            <h3 className="text-lg md:text-xl font-bold text-gray-800 mb-4 flex items-center gap-2"><HiOutlineDocumentText className="text-[#0094FF]" /> Essay Questions</h3>
+            <div className="space-y-4">
+                {template.essays.map((essay, eIndex) => (
+                    <div key={essay.id} className="bg-blue-50/50 p-3 md:p-4 rounded-lg border border-blue-100 flex items-start md:items-center gap-3">
+                        <span className="text-[#0094FF] font-bold text-sm mt-2 md:mt-0">Q{eIndex + 1}</span>
+                        <textarea value={essay.question} onChange={(e) => updateEssayText(essay.id, e.target.value)} className="flex-1 p-2 bg-white border border-gray-200 rounded outline-none text-sm resize-none" rows="2" placeholder="Essay question..." />
+                        <button onClick={() => removeEssay(essay.id)} className="text-gray-400 hover:text-red-500 mt-1 md:mt-0 p-2"><HiOutlineTrash className="w-4 h-4" /></button>
+                    </div>
+                ))}
+            </div>
+            <button onClick={addEssay} className="mt-3 text-sm text-[#0094FF] font-medium flex items-center gap-1 hover:underline"><HiOutlinePlus className="w-4 h-4" /> Add Essay Question</button>
+        </div>
+
+        <div className="sticky bottom-0 bg-white border-t border-gray-100 pt-4 pb-2 mt-8 flex justify-end z-10">
+            <button onClick={handleSaveCustomTemplate} className="w-full md:w-auto bg-[#0094FF] text-white px-8 py-3 rounded-lg font-bold shadow-lg hover:bg-[#002B66] transition-colors flex justify-center items-center gap-2">
                 <HiOutlineCheckCircle className="w-5 h-5" /> 
-                {template.id ? "Update Existing Template" : "Save Template to Database"}
+                {template.id ? "Update Existing Template" : "Save Template"}
             </button>
         </div>
       </div>
@@ -265,46 +374,82 @@ const RankingsSection = ({ internRankings, user }) => {
         </div>
         
         {internRankings.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs uppercase text-gray-500 font-bold">Rank</th>
-                  <th className="px-6 py-3 text-left text-xs uppercase text-gray-500 font-bold">Name</th>
-                  <th className="px-6 py-3 text-left text-xs uppercase text-gray-500 font-bold">Avg Score</th>
-                  <th className="px-6 py-3 text-left text-xs uppercase text-gray-500 font-bold">Trend</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+          <>
+            {/* Mobile Card View */}
+            <div className="block md:hidden p-4 space-y-3">
                 {internRankings.map((intern, index) => {
-                     const isMe = isIntern && intern.internId === user.uid;
-                     
-                     return (
-                         <tr key={index} className={isMe ? "bg-blue-50 transition-colors" : "hover:bg-gray-50 transition-colors"}>
-                           <td className="px-6 py-4 font-bold text-[#002B66] flex items-center gap-3">
-                               <span className="text-gray-500 w-4">{index + 1}</span>
-                               {index === 0 && <FaCrown className="text-yellow-500 text-xl drop-shadow-sm" />}
-                               {index === 1 && <FaMedal className="text-gray-400 text-lg" />}
-                               {index === 2 && <FaMedal className="text-orange-400 text-lg" />}
-                           </td>
-                           <td className="px-6 py-4 font-medium text-gray-900">
-                               {intern.internName} 
-                               {isMe && <span className="ml-3 text-[10px] bg-[#0094FF] text-white px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shadow-sm">You</span>}
-                           </td>
-                           <td className="px-6 py-4 text-[#0094FF] font-black">{Number(intern.averageScore).toFixed(2)}</td>
-                           <td className="px-6 py-4">
-                               <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full w-fit ${intern.trend === 'Improving' ? 'bg-green-100 text-green-700' : intern.trend === 'Declining' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
-                                   {intern.trend === 'Improving' && <HiArrowTrendingUp />}
-                                   {intern.trend === 'Declining' && <HiArrowTrendingDown />}
-                                   {intern.trend || "Stable"}
-                               </span>
-                           </td>
-                         </tr>
-                     );
+                    const isMe = isIntern && intern.internId === user.uid;
+                    return (
+                        <div key={index} className={`flex items-center justify-between p-4 rounded-lg border ${isMe ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-100 shadow-sm'}`}>
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 flex justify-center">
+                                    {index === 0 ? <FaCrown className="text-yellow-500 text-xl" /> : 
+                                     index === 1 ? <FaMedal className="text-gray-400 text-lg" /> : 
+                                     index === 2 ? <FaMedal className="text-orange-400 text-lg" /> : 
+                                     <span className="text-gray-500 font-bold">{index + 1}</span>}
+                                </div>
+                                <div>
+                                    <h4 className="font-bold text-gray-900 flex items-center gap-2">
+                                        {intern.internName}
+                                        {isMe && <span className="text-[10px] bg-[#0094FF] text-white px-2 py-0.5 rounded-full font-bold uppercase">You</span>}
+                                    </h4>
+                                    <span className={`flex items-center gap-1 text-[10px] font-bold uppercase mt-1 ${intern.trend === 'Improving' ? 'text-green-600' : intern.trend === 'Declining' ? 'text-red-600' : 'text-gray-500'}`}>
+                                        {intern.trend === 'Improving' && <HiArrowTrendingUp />}
+                                        {intern.trend === 'Declining' && <HiArrowTrendingDown />}
+                                        {intern.trend || "Stable"}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <span className="text-sm text-gray-400 font-bold block mb-[-4px]">Avg</span>
+                                <span className="text-2xl font-black text-[#0094FF]">{Number(intern.averageScore).toFixed(2)}</span>
+                            </div>
+                        </div>
+                    );
                 })}
-              </tbody>
-            </table>
-          </div>
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
+                <thead className="bg-gray-50">
+                    <tr>
+                    <th className="px-6 py-3 text-left text-xs uppercase text-gray-500 font-bold">Rank</th>
+                    <th className="px-6 py-3 text-left text-xs uppercase text-gray-500 font-bold">Name</th>
+                    <th className="px-6 py-3 text-left text-xs uppercase text-gray-500 font-bold">Avg Score</th>
+                    <th className="px-6 py-3 text-left text-xs uppercase text-gray-500 font-bold">Trend</th>
+                    </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                    {internRankings.map((intern, index) => {
+                        const isMe = isIntern && intern.internId === user.uid;
+                        return (
+                            <tr key={index} className={isMe ? "bg-blue-50 transition-colors" : "hover:bg-gray-50 transition-colors"}>
+                            <td className="px-6 py-4 font-bold text-[#002B66] flex items-center gap-3">
+                                <span className="text-gray-500 w-4">{index + 1}</span>
+                                {index === 0 && <FaCrown className="text-yellow-500 text-xl drop-shadow-sm" />}
+                                {index === 1 && <FaMedal className="text-gray-400 text-lg" />}
+                                {index === 2 && <FaMedal className="text-orange-400 text-lg" />}
+                            </td>
+                            <td className="px-6 py-4 font-medium text-gray-900">
+                                {intern.internName} 
+                                {isMe && <span className="ml-3 text-[10px] bg-[#0094FF] text-white px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shadow-sm">You</span>}
+                            </td>
+                            <td className="px-6 py-4 text-[#0094FF] font-black">{Number(intern.averageScore).toFixed(2)}</td>
+                            <td className="px-6 py-4">
+                                <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full w-fit ${intern.trend === 'Improving' ? 'bg-green-100 text-green-700' : intern.trend === 'Declining' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                                    {intern.trend === 'Improving' && <HiArrowTrendingUp />}
+                                    {intern.trend === 'Declining' && <HiArrowTrendingDown />}
+                                    {intern.trend || "Stable"}
+                                </span>
+                            </td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+                </table>
+            </div>
+          </>
         ) : (
             <div className="text-center py-12 text-gray-500 italic">
                 No rankings available yet.
@@ -342,7 +487,7 @@ const BadgesSection = ({ data, handlers, user }) => {
                         </div>
                     </div>
                     {hasIssuedCert && (
-                        <button onClick={() => handlers.handleViewCertificate(latestEval)} className="px-6 py-3 bg-yellow-500 text-white font-bold rounded-lg shadow-md hover:bg-yellow-600 transition-colors whitespace-nowrap active:scale-95 flex items-center gap-2">
+                        <button onClick={() => handlers.handleViewCertificate(latestEval)} className="w-full md:w-auto px-6 py-3 bg-yellow-500 text-white font-bold rounded-lg shadow-md hover:bg-yellow-600 transition-colors whitespace-nowrap active:scale-95 flex justify-center items-center gap-2">
                             <HiOutlineArrowDownTray className="w-5 h-5"/> View & Download
                         </button>
                     )}
@@ -397,8 +542,8 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
       <div className="space-y-6">
          {isStaff && (
            <div className="bg-white p-4 rounded-lg border border-gray-200 flex items-center gap-4 shadow-sm">
-              <HiOutlineMagnifyingGlass className="text-[#0094FF] w-5 h-5" />
-              <select value={selectedIntern} onChange={(e) => setSelectedIntern(e.target.value)} className="bg-transparent outline-none flex-1 font-bold text-[#002B66] cursor-pointer">
+              <HiOutlineMagnifyingGlass className="text-[#0094FF] w-5 h-5 shrink-0" />
+              <select value={selectedIntern} onChange={(e) => setSelectedIntern(e.target.value)} className="bg-transparent outline-none w-full font-bold text-[#002B66] cursor-pointer">
                  <option value="all">Class Overview (All Interns)</option>
                  {internRankings.map(i => <option key={i.internId} value={i.internId}>{i.internName}</option>)}
               </select>
@@ -486,26 +631,26 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
          ) : (
              <div className="space-y-6 animate-fadeIn">
                  <div className={`${performanceStatus.bg} p-4 rounded-lg border border-transparent flex items-center gap-3 shadow-sm`}>
-                    <div className={`p-2 rounded-full bg-white ${performanceStatus.color} shadow-sm`}>{performanceStatus.icon}</div>
+                    <div className={`p-2 rounded-full bg-white ${performanceStatus.color} shadow-sm shrink-0`}>{performanceStatus.icon}</div>
                     <div><p className={`text-xs font-bold uppercase ${performanceStatus.color} opacity-80`}>Current Status</p><h3 className={`text-lg font-bold ${performanceStatus.color}`}>{performanceStatus.label}</h3></div>
                  </div>
                  
-                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm relative overflow-hidden group">
                        <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><HiOutlineChartPie className="w-24 h-24"/></div>
                        <p className="text-sm font-bold text-gray-500 uppercase">Average Score</p>
-                       <div className="flex items-baseline gap-2 mt-2"><p className="text-4xl font-black text-[#0094FF]">{avgScore?.toFixed(2)}</p><span className="text-xl font-bold text-gray-400">({getLetterMetric(avgScore || 0)})</span></div>
+                       <div className="flex items-baseline gap-2 mt-2"><p className="text-3xl md:text-4xl font-black text-[#0094FF]">{avgScore?.toFixed(2)}</p><span className="text-base md:text-xl font-bold text-gray-400">({getLetterMetric(avgScore || 0)})</span></div>
                     </div>
                     <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
                        <p className="text-sm font-bold text-gray-500 uppercase" title="Comparing this against the average shows if they are improving.">Latest Rating</p>
-                       <div className="flex items-baseline gap-2 mt-2"><p className={`text-4xl font-black ${latest >= 4 ? 'text-green-600' : 'text-indigo-600'}`}>{latest?.toFixed(2) || "0.00"}</p><span className="text-xl font-bold text-gray-400">({getLetterMetric(latest || 0)})</span></div>
+                       <div className="flex items-baseline gap-2 mt-2"><p className={`text-3xl md:text-4xl font-black ${latest >= 4 ? 'text-green-600' : 'text-indigo-600'}`}>{latest?.toFixed(2) || "0.00"}</p><span className="text-base md:text-xl font-bold text-gray-400">({getLetterMetric(latest || 0)})</span></div>
                     </div>
                     <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
-                       <p className="text-sm font-bold text-gray-500 uppercase">Evaluations</p><p className="text-4xl font-black text-gray-800 mt-2">{targetData.evaluationsCompleted || 0}</p>
+                       <p className="text-sm font-bold text-gray-500 uppercase">Evaluations</p><p className="text-3xl md:text-4xl font-black text-gray-800 mt-2">{targetData.evaluationsCompleted || 0}</p>
                     </div>
                     <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
                        <p className="text-sm font-bold text-gray-500 uppercase">Stability Trend</p>
-                       <div className="flex items-center gap-2 mt-2"><span className={`text-2xl font-black ${trend === 'Improving' ? 'text-green-500' : trend === 'Declining' ? 'text-red-500' : 'text-gray-400'}`}>{trend || (trendValue > 0 ? "Up" : "Stable")}</span>{trend === 'Improving' ? <HiArrowTrendingUp className="w-6 h-6 text-green-500"/> : <HiArrowTrendingDown className="w-6 h-6 text-red-500"/>}</div>
+                       <div className="flex items-center gap-2 mt-2"><span className={`text-xl md:text-2xl font-black ${trend === 'Improving' ? 'text-green-500' : trend === 'Declining' ? 'text-red-500' : 'text-gray-400'}`}>{trend || (trendValue > 0 ? "Up" : "Stable")}</span>{trend === 'Improving' ? <HiArrowTrendingUp className="w-6 h-6 text-green-500"/> : <HiArrowTrendingDown className="w-6 h-6 text-red-500"/>}</div>
                     </div>
                  </div>
                  
@@ -518,8 +663,8 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
                               const style = getPerformanceStyle(s.score);
                               return (
                                   <div key={idx} className={`flex justify-between items-center p-3 rounded-lg border ${style.bg} ${style.border}`}>
-                                     <div className="flex items-center gap-3"><span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${style.badge}`}>{idx+1}</span><span className="font-medium text-gray-800">{s.section}</span></div>
-                                     <div className="text-right"><span className={`font-bold block ${style.text}`}>{s.score}</span><span className={`text-[10px] font-bold px-1 rounded ${style.badge}`}>{getLetterMetric(s.score)}</span></div>
+                                     <div className="flex items-center gap-3"><span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${style.badge} shrink-0`}>{idx+1}</span><span className="font-medium text-gray-800 text-sm md:text-base">{s.section}</span></div>
+                                     <div className="text-right shrink-0"><span className={`font-bold block ${style.text}`}>{s.score}</span><span className={`text-[10px] font-bold px-1 rounded ${style.badge}`}>{getLetterMetric(s.score)}</span></div>
                                   </div>
                               );
                            })}
@@ -534,8 +679,8 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
                               const style = getPerformanceStyle(s.score);
                               return (
                                   <div key={idx} className={`flex justify-between items-center p-3 rounded-lg border ${style.bg} ${style.border}`}>
-                                     <div className="flex items-center gap-3"><span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${style.badge}`}>{idx+1}</span><span className="font-medium text-gray-800">{s.section}</span></div>
-                                     <div className="text-right"><span className={`font-bold block ${style.text}`}>{s.score}</span><span className={`text-[10px] font-bold px-1 rounded ${style.badge}`}>{getLetterMetric(s.score)}</span></div>
+                                     <div className="flex items-center gap-3"><span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${style.badge} shrink-0`}>{idx+1}</span><span className="font-medium text-gray-800 text-sm md:text-base">{s.section}</span></div>
+                                     <div className="text-right shrink-0"><span className={`font-bold block ${style.text}`}>{s.score}</span><span className={`text-[10px] font-bold px-1 rounded ${style.badge}`}>{getLetterMetric(s.score)}</span></div>
                                   </div>
                               );
                            })}
@@ -545,25 +690,25 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
                  </div>
 
                  {targetData.history && targetData.history.length > 0 && (
-                     <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm mt-6">
+                     <div className="bg-white rounded-lg border border-gray-200 p-4 md:p-6 shadow-sm mt-6">
                          <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2 border-b pb-2">
-                             <HiOutlineCalendar className="text-[#0094FF] w-5 h-5"/> Detailed Evaluation History (Pros & Cons)
+                             <HiOutlineCalendar className="text-[#0094FF] w-5 h-5"/> Detailed Evaluation History
                          </h3>
-                         <div className="relative border-l-2 border-blue-100 ml-4 space-y-8 pb-4">
+                         <div className="relative border-l-2 border-blue-100 ml-2 md:ml-4 space-y-8 pb-4">
                              {targetData.history.map((hist, idx) => (
-                                 <div key={idx} className="relative pl-8">
+                                 <div key={idx} className="relative pl-6 md:pl-8">
                                      <div className="absolute -left-[9px] top-4 w-4 h-4 rounded-full bg-[#0094FF] border-[3px] border-white shadow-sm"></div>
                                      
-                                     <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 shadow-sm w-full transition-shadow hover:shadow-md">
+                                     <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 md:p-5 shadow-sm w-full transition-shadow hover:shadow-md">
                                          
-                                         <div className="flex justify-between items-center border-b border-gray-200 pb-4 mb-4">
+                                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-200 pb-4 mb-4 gap-3">
                                              <div>
                                                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Evaluation Phase</span>
                                                 <span className="font-black text-[#002B66] text-xl">{hist.date}</span>
                                              </div>
-                                             <div className="text-right">
+                                             <div className="md:text-right w-full md:w-auto">
                                                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Official Grade</span>
-                                                <span className="font-black text-[#0094FF] text-2xl bg-blue-100/50 px-3 py-1 rounded-lg border border-blue-100">
+                                                <span className="font-black text-[#0094FF] text-xl md:text-2xl bg-blue-100/50 px-3 py-1 rounded-lg border border-blue-100 block md:inline-block">
                                                     {translateFinalGrade(hist.score, hist.format)}
                                                 </span>
                                              </div>
@@ -577,7 +722,7 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
                                                          {hist.strengths.map((s, i) => (
                                                              <div key={i} className="flex justify-between items-center text-sm bg-white border border-green-100 p-2.5 rounded-lg shadow-sm">
                                                                  <span className="font-medium text-gray-700 truncate pr-2" title={s.section}>{s.section}</span>
-                                                                 <span className="font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded">{s.score}</span>
+                                                                 <span className="font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded shrink-0">{s.score}</span>
                                                              </div>
                                                          ))}
                                                      </div>
@@ -591,7 +736,7 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
                                                          {hist.improvementAreas.map((s, i) => (
                                                              <div key={i} className="flex justify-between items-center text-sm bg-white border border-red-100 p-2.5 rounded-lg shadow-sm">
                                                                  <span className="font-medium text-gray-700 truncate pr-2" title={s.section}>{s.section}</span>
-                                                                 <span className="font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">{s.score}</span>
+                                                                 <span className="font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded shrink-0">{s.score}</span>
                                                              </div>
                                                          ))}
                                                      </div>
@@ -604,7 +749,6 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
                          </div>
                      </div>
                  )}
-                 
              </div>
          )}
       </div>
@@ -660,14 +804,14 @@ const DashboardView = ({ data, handlers, user }) => {
     if (viewMode === 'history') {
         return (
             <div className="space-y-6 animate-fadeIn">
-                <div className="flex flex-col md:flex-row items-center gap-4 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
-                    <button onClick={() => setViewMode('summary')} className="text-gray-500 hover:bg-gray-100 px-3 py-2 rounded font-medium transition-colors whitespace-nowrap">← Back</button>
+                <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <button onClick={() => setViewMode('summary')} className="text-gray-500 hover:bg-gray-100 px-3 py-2 rounded font-medium transition-colors whitespace-nowrap w-full lg:w-auto text-left">← Back</button>
                     <div className="flex-1 relative w-full">
                         <HiOutlineMagnifyingGlass className="absolute left-3 top-3 text-[#0094FF] w-5 h-5"/>
                         <input type="text" placeholder="Search evaluation history..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg outline-none focus:border-[#0094FF] focus:ring-1 focus:ring-[#0094FF] transition-all"/>
                     </div>
-                    <div className="flex gap-2 w-full md:w-auto">
-                        <div className="relative flex-1 md:flex-none">
+                    <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+                        <div className="relative flex-1 sm:flex-none">
                             <HiOutlineFunnel className="absolute left-2.5 top-3 text-gray-400 w-4 h-4"/>
                             <select value={filterPhase} onChange={(e) => setFilterPhase(e.target.value)} className="w-full pl-8 pr-4 py-2 border border-gray-200 rounded-lg outline-none focus:border-[#0094FF] cursor-pointer text-sm font-medium">
                                 <option value="All">All Phases</option>
@@ -676,7 +820,7 @@ const DashboardView = ({ data, handlers, user }) => {
                                 <option value="Final">Final</option>
                             </select>
                         </div>
-                        <div className="relative flex-1 md:flex-none">
+                        <div className="relative flex-1 sm:flex-none">
                             <HiOutlineArrowsUpDown className="absolute left-2.5 top-3 text-gray-400 w-4 h-4"/>
                             <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-full pl-8 pr-4 py-2 border border-gray-200 rounded-lg outline-none focus:border-[#0094FF] cursor-pointer text-sm font-medium">
                                 <option value="dateDesc">Newest First</option>
@@ -688,13 +832,12 @@ const DashboardView = ({ data, handlers, user }) => {
                     </div>
                 </div>
                 
-                <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                <div className="bg-white rounded-lg border border-gray-200 p-4 md:p-6 shadow-sm">
                     <h3 className="text-lg font-bold text-[#002B66] mb-6">Full Evaluation History</h3>
                     <div className="space-y-3">
                         {filteredHistory.map(ev => {
                             const internData = data.internRankings?.find(i => i.internId === ev.internId);
                             const isFinished = internData?.internshipStatus === "Finished";
-                            
                             const internEvals = data.allEvaluations.filter(e => e.internId === ev.internId && (e.status === 'submitted' || e.status === 'completed'));
                             const hasFinal = internEvals.some(e => e.evaluationType === "Final");
                             
@@ -707,28 +850,37 @@ const DashboardView = ({ data, handlers, user }) => {
                             }
 
                             return (
-                                <div key={ev.id} className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 rounded-lg hover:shadow-md transition-all bg-white border border-gray-100">
-                                    <div className="flex items-center gap-4 mb-3 md:mb-0">
-                                        <div className={`p-3 rounded-lg ${ev.status === 'submitted' ? 'bg-green-100 text-green-600' : 'bg-yellow-100 text-yellow-600'}`}><HiOutlineArchiveBox className="w-6 h-6"/></div>
-                                        <div>
-                                            <h4 className="font-bold text-gray-900">{ev.evaluationType} for {ev.internName}</h4>
-                                            <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
-                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${ev.status === 'submitted' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{ev.status}</span><span>•</span>
-                                                <span className="font-medium text-gray-700">
+                                <div key={ev.id} className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 rounded-lg hover:shadow-md transition-all bg-white border border-gray-100 gap-4">
+                                    <div className="flex items-start md:items-center gap-4 w-full">
+                                        <div className={`p-3 rounded-lg mt-1 md:mt-0 ${ev.status === 'submitted' ? 'bg-green-100 text-green-600' : 'bg-yellow-100 text-yellow-600'}`}><HiOutlineArchiveBox className="w-6 h-6"/></div>
+                                        <div className="flex-1">
+                                            <h4 className="font-bold text-gray-900 leading-tight">{ev.evaluationType} for {ev.internName}</h4>
+                                            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 mt-1.5">
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${ev.status === 'submitted' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{ev.status}</span>
+                                                <span className="hidden sm:inline">•</span>
+                                                <span className="font-medium text-gray-700 bg-gray-50 px-2 rounded w-full sm:w-auto mt-1 sm:mt-0">
                                                     Grade: {translateFinalGrade(ev.overallScore, ev.savedTemplateSnapshot?.gradingFormat)}
                                                 </span>
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="flex gap-2 w-full md:w-auto">
-                                        {isCertificateBearer && !isSupervisor && ev.certificateIssued && (
-                                            <button onClick={() => handlers.handleViewCertificate(ev)} className="px-4 py-2 text-sm bg-[#0094FF] text-white rounded-lg font-bold hover:bg-[#002B66] transition-colors shadow-sm flex items-center gap-2"><FaMedal /> View Cert</button>
-                                        )}
-
-                                        <button onClick={() => handlers.handleEditEvaluation(ev)} className="flex-1 md:flex-none px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-[#0094FF] hover:border-[#0094FF] font-medium transition-colors">
-                                            {ev.status === 'draft' || ev.status === 'pending_supervisor' ? 'Open Assignment' : 'View Details'}
-                                        </button>
-                                    </div>
+<div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto shrink-0">
+    {isCertificateBearer && !isSupervisor && ev.certificateIssued && (
+        <button onClick={() => handlers.handleViewCertificate(ev)} className="w-full sm:w-auto px-4 py-2 text-sm bg-[#0094FF] text-white rounded-lg font-bold hover:bg-[#002B66] transition-colors shadow-sm flex justify-center items-center gap-2"><FaMedal /> View Cert</button>
+    )}
+    <button 
+        onClick={() => {
+            const isAssignedSup = user.uid === ev.supervisorId;
+            const isEditable = isAssignedSup && (ev.status === 'draft' || ev.status === 'pending_supervisor');
+            isEditable ? handlers.handleEditEvaluation(ev) : handlers.handleViewEvaluation(ev);
+        }} 
+        className="w-full sm:w-auto px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-[#0094FF] hover:border-[#0094FF] font-medium transition-colors text-center"
+    >
+        {(user.uid === ev.supervisorId && (ev.status === 'draft' || ev.status === 'pending_supervisor')) 
+            ? 'Open Assignment' 
+            : 'View Details'}
+    </button>
+</div>
                                 </div>
                             );
                         })}
@@ -742,7 +894,7 @@ const DashboardView = ({ data, handlers, user }) => {
     return (
         <div className="space-y-6 animate-fadeIn">
             {isCoordinator && data.customTemplates?.length > 0 && (
-                <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm relative overflow-hidden">
+                <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1 h-full bg-[#0094FF]"></div>
                     <h3 className="text-lg font-bold text-[#002B66] mb-4 flex items-center gap-2">
                         <HiOutlinePencilSquare className="text-[#0094FF] w-6 h-6" /> Manage Custom Templates
@@ -766,24 +918,24 @@ const DashboardView = ({ data, handlers, user }) => {
             )}
 
             {isCoordinator && coordinatorsPendingSentForms.length > 0 && (
-                <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 shadow-sm relative overflow-hidden">
+                <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 md:p-6 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1 h-full bg-[#0094FF]"></div>
                     <h3 className="text-lg font-bold text-[#002B66] mb-6 flex items-center gap-2">
-                        <HiOutlineInboxArrowDown className="text-[#0094FF] w-6 h-6" /> Pending Supervisor Action (Sent Forms Inbox)
+                        <HiOutlineInboxArrowDown className="text-[#0094FF] w-6 h-6" /> Pending Supervisor Action
                     </h3>
                     <div className="space-y-3">
                         {coordinatorsPendingSentForms.map(task => (
-                            <div key={task.id} className="flex flex-col md:flex-row items-center justify-between p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:border-[#0094FF] transition-colors">
-                                <div className="flex items-center gap-4 w-full">
-                                    <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 text-[#0094FF]">
+                            <div key={task.id} className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:border-[#0094FF] transition-colors gap-3">
+                                <div className="flex items-start md:items-center gap-4 w-full">
+                                    <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 text-[#0094FF] shrink-0 mt-1 md:mt-0">
                                         <HiOutlineArchiveBox className="w-6 h-6"/>
                                     </div>
                                     <div>
-                                        <p className="font-bold text-gray-900">{task.internName} ({task.evaluationType})</p>
-                                        <p className="text-xs text-gray-500">Sent to Supervisor {task.updatedAt?.seconds ? new Date(task.updatedAt.seconds * 1000).toLocaleDateString() : 'recently'} • Current Status: {task.status}</p>
+                                        <p className="font-bold text-gray-900 leading-tight">{task.internName} ({task.evaluationType})</p>
+                                        <p className="text-xs text-gray-500 mt-1">Sent {task.updatedAt?.seconds ? new Date(task.updatedAt.seconds * 1000).toLocaleDateString() : 'recently'} • Status: {task.status}</p>
                                     </div>
                                 </div>
-                                <div className="flex gap-2 mt-4 md:mt-0 w-full md:w-auto">
+                                <div className="w-full md:w-auto shrink-0">
                                     <button onClick={() => handleRecallPending(task.id)} className="w-full md:w-auto px-4 py-2 text-sm bg-white border border-red-200 text-red-600 rounded-lg font-bold hover:bg-red-50 transition-colors flex items-center justify-center gap-2">
                                         <HiOutlineTrash className="w-4 h-4" /> Unsent
                                     </button>
@@ -795,14 +947,14 @@ const DashboardView = ({ data, handlers, user }) => {
             )}
 
             {isSupervisor && pendingTasks.length > 0 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 shadow-sm relative overflow-hidden">
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 md:p-6 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1 h-full bg-[#0094FF]"></div>
                     <h3 className="text-xl font-bold text-[#002B66] mb-4 flex items-center gap-2">
                         <HiOutlineDocumentText className="text-[#0094FF] w-6 h-6" /> Action Required ({pendingTasks.length})
                     </h3>
                     <div className="space-y-3">
                         {pendingTasks.map(task => (
-                            <div key={task.id} className="flex flex-col md:flex-row items-center justify-between p-4 bg-white rounded-lg shadow-sm border border-blue-100 hover:border-[#0094FF] transition-colors">
+                            <div key={task.id} className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 bg-white rounded-lg shadow-sm border border-blue-100 hover:border-[#0094FF] transition-colors gap-4">
                                 <div className="flex items-center gap-4 w-full">
                                     <div className="p-2 rounded-full bg-blue-100 text-[#0094FF] font-black w-10 h-10 flex items-center justify-center shrink-0">!</div>
                                     <div>
@@ -810,7 +962,7 @@ const DashboardView = ({ data, handlers, user }) => {
                                         <p className="text-sm text-gray-500">{task.evaluationType} • Assigned by Coordinator</p>
                                     </div>
                                 </div>
-                                <button onClick={() => handlers.handleEditEvaluation(task)} className="mt-4 md:mt-0 w-full md:w-auto px-6 py-2 bg-[#0094FF] text-white font-bold rounded-lg hover:bg-[#002B66] shadow transition-colors whitespace-nowrap">
+                                <button onClick={() => handlers.handleEditEvaluation(task)} className="w-full md:w-auto px-6 py-3 md:py-2 bg-[#0094FF] text-white font-bold rounded-lg hover:bg-[#002B66] shadow transition-colors whitespace-nowrap">
                                     Start Evaluation
                                 </button>
                             </div>
@@ -820,75 +972,52 @@ const DashboardView = ({ data, handlers, user }) => {
             )}
 
             {isSupervisor && drafts.length > 0 && (
-                <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6 shadow-sm">
                     <h3 className="text-lg font-bold text-[#002B66] mb-6 flex items-center gap-2"><HiOutlinePencilSquare className="text-orange-500"/> Continue Working (Drafts)</h3>
                     <div className="space-y-3">
                         {drafts.slice(0, 3).map(ev => (
-                            <div key={ev.id} className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 border border-orange-100 bg-orange-50/30 rounded-lg hover:shadow-md transition-shadow">
-                                <div className="flex items-center gap-4 mb-3 md:mb-0">
-                                    <div className="p-3 rounded-lg bg-orange-100 text-orange-600"><HiOutlinePencilSquare className="w-6 h-6"/></div>
+                            <div key={ev.id} className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 border border-orange-100 bg-orange-50/30 rounded-lg hover:shadow-md transition-shadow gap-4">
+                                <div className="flex items-start md:items-center gap-4 w-full">
+                                    <div className="p-3 rounded-lg bg-orange-100 text-orange-600 shrink-0 mt-1 md:mt-0"><HiOutlinePencilSquare className="w-6 h-6"/></div>
                                     <div>
-                                        <h4 className="font-bold text-gray-900">{ev.evaluationType} for {ev.internName}</h4>
+                                        <h4 className="font-bold text-gray-900 leading-tight">{ev.evaluationType} for {ev.internName}</h4>
                                         <div className="text-sm text-gray-500 mt-1">Last edited: {ev.updatedAt?.seconds ? new Date(ev.updatedAt.seconds * 1000).toLocaleDateString() : 'Just now'}</div>
                                     </div>
                                 </div>
-                                <button onClick={() => handlers.handleEditEvaluation(ev)} className="w-full md:w-auto px-4 py-2 text-sm bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 font-bold transition-colors">Resume Edit</button>
+                                <button onClick={() => handlers.handleEditEvaluation(ev)} className="w-full md:w-auto px-4 py-2 text-sm bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 font-bold transition-colors text-center">Resume Edit</button>
                             </div>
                         ))}
                     </div>
                 </div>
             )}
 
-            <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                <div className="flex justify-between items-center mb-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2">
                     <h3 className="text-lg font-bold text-[#002B66] flex items-center gap-2"><HiOutlineClock className="text-[#0094FF]"/> Recently Submitted</h3>
                     <button onClick={() => setViewMode('history')} className="text-sm font-bold text-[#0094FF] hover:underline flex items-center gap-1">View Full History <HiArrowRight/></button>
                 </div>
                 {recentSubmitted.length === 0 ? <div className="text-center py-12 text-gray-400 italic border border-dashed border-gray-200 rounded-lg">No recent submissions found.</div> : (
                     <div className="space-y-3">
-                        {recentSubmitted.map(ev => {
-                            const internData = data.internRankings?.find(i => i.internId === ev.internId);
-                            
-                            const internEvals = data.allEvaluations.filter(e => 
-                                e.internId === ev.internId && 
-                                (e.status === 'submitted' || e.status === 'completed')
-                            );
-                            
-                            const hasFinal = internEvals.some(e => e.evaluationType === "Final");
-                            let isCertificateBearer = false;
-
-                            if (ev.evaluationType === "Final") {
-                                isCertificateBearer = true;
-                            } else if (ev.evaluationType === "Regular" && !hasFinal) {
-                                const latestRegular = internEvals
-                                    .filter(e => e.evaluationType === "Regular")
-                                    .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0];
-                                
-                                if (latestRegular && ev.id === latestRegular.id) {
-                                    isCertificateBearer = true;
-                                }
-                            }
-
-                            return (
-                                <div key={ev.id} className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 border border-green-100 bg-green-50/30 rounded-lg hover:shadow-md transition-shadow">
-                                    <div className="flex items-center gap-4 mb-3 md:mb-0">
-                                        <div className="p-3 rounded-lg bg-green-100 text-green-600"><HiOutlineCheckCircle className="w-6 h-6"/></div>
-                                        <div>
-                                            <h4 className="font-bold text-gray-900">{ev.evaluationType} for {ev.internName}</h4>
-                                            <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
-                                                <span className="text-green-700 font-bold text-[10px] tracking-wider uppercase px-2 py-0.5 bg-green-200 rounded">Submitted</span><span>•</span>
-                                                <span className="font-medium text-gray-700">
-                                                    Grade: {translateFinalGrade(ev.overallScore, ev.savedTemplateSnapshot?.gradingFormat)}
-                                                </span>
-                                            </div>
+                        {recentSubmitted.map(ev => (
+                            <div key={ev.id} className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 border border-green-100 bg-green-50/30 rounded-lg hover:shadow-md transition-shadow gap-4">
+                                <div className="flex items-start md:items-center gap-4 w-full">
+                                    <div className="p-3 rounded-lg bg-green-100 text-green-600 shrink-0 mt-1 md:mt-0"><HiOutlineCheckCircle className="w-6 h-6"/></div>
+                                    <div className="flex-1">
+                                        <h4 className="font-bold text-gray-900 leading-tight">{ev.evaluationType} for {ev.internName}</h4>
+                                        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 mt-1.5">
+                                            <span className="text-green-700 font-bold text-[10px] tracking-wider uppercase px-2 py-0.5 bg-green-200 rounded">Submitted</span>
+                                            <span className="hidden sm:inline">•</span>
+                                            <span className="font-medium text-gray-700 bg-white px-2 py-0.5 rounded border border-green-100 mt-1 sm:mt-0 w-full sm:w-auto">
+                                                Grade: {translateFinalGrade(ev.overallScore, ev.savedTemplateSnapshot?.gradingFormat)}
+                                            </span>
                                         </div>
                                     </div>
-                                    <div className="flex gap-2 w-full md:w-auto">
-                                        <button onClick={() => handlers.handleViewEvaluation(ev)} className="w-full px-4 py-2 text-sm border border-gray-300 bg-white rounded-lg hover:bg-gray-50 hover:text-[#0094FF] hover:border-[#0094FF] font-medium transition-colors">View Details</button>
-                                    </div>
                                 </div>
-                            );
-                        })}
+                                <div className="w-full md:w-auto shrink-0">
+                                    <button onClick={() => handlers.handleViewEvaluation(ev)} className="w-full md:w-auto px-4 py-2 text-sm border border-gray-300 bg-white rounded-lg hover:bg-gray-50 hover:text-[#0094FF] hover:border-[#0094FF] font-medium transition-colors text-center">View Details</button>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
             </div>
@@ -907,7 +1036,13 @@ const TabSection = ({ currentTab, data, user, handlers }) => {
 
   return (
     <div className="space-y-6">
-       <div className="flex space-x-2 bg-white p-1 rounded-lg border border-gray-200 w-fit mb-6 shadow-sm overflow-x-auto">{navItems.map(item => (<button key={item.id} onClick={() => handlers.setActiveView(item.id)} className={`flex items-center space-x-2 px-4 py-2 rounded-md font-medium transition-colors whitespace-nowrap ${currentTab === item.id ? 'bg-[#0094FF] text-white shadow' : 'text-gray-600 hover:bg-gray-50'}`}><span className="text-lg">{item.icon}</span> <span>{item.label}</span></button>))}</div>
+       <div className="flex space-x-2 bg-white p-1 rounded-lg border border-gray-200 w-full md:w-fit mb-6 shadow-sm overflow-x-auto pb-2 md:pb-1 hide-scrollbar">
+           {navItems.map(item => (
+               <button key={item.id} onClick={() => handlers.setActiveView(item.id)} className={`flex items-center space-x-2 px-4 py-2 rounded-md font-medium transition-colors whitespace-nowrap ${currentTab === item.id ? 'bg-[#0094FF] text-white shadow' : 'text-gray-600 hover:bg-gray-50'}`}>
+                   <span className="text-lg">{item.icon}</span> <span>{item.label}</span>
+               </button>
+           ))}
+       </div>
        {currentTab === 'dashboard' && <DashboardView data={data} handlers={handlers} user={user} />}
        {currentTab === 'roster' && <InternRosterSection data={data} handlers={handlers} user={user} />}
        {currentTab === 'rankings' && <RankingsSection internRankings={data.internRankings} user={user} />}

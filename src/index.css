@@ -33,3 +33,11 @@
     @apply font-dm-sans bg-page-bg text-sidebar-text antialiased;
   }
 }
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

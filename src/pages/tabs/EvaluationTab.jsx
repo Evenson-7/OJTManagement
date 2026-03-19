@@ -166,10 +166,10 @@ const EvaluationDashboard = ({ stats, rankings, user }) => {
   }
   
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
       <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between"><div><p className="text-sm font-medium text-gray-500 mb-1">{user.role === 'intern' ? 'My Total Evaluations' : 'Total Evaluations'}</p><h3 className={`text-3xl font-bold ${COLORS.navy}`}>{displayTotal}</h3></div><div className={`w-12 h-12 ${COLORS.bgLight} rounded-full flex items-center justify-center ${COLORS.navy}`}><FileText size={24} /></div></div>
       <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between"><div><p className="text-sm font-medium text-gray-500 mb-1">{user.role === 'intern' ? 'Department Avg' : 'Class Average'}</p><h3 className={`text-3xl font-bold ${COLORS.navy}`}>{averageScore > 0 ? averageScore : "N/A"}</h3></div><div className={`w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center ${COLORS.accent}`}><BarChart2 size={24} /></div></div>
-      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between sm:col-span-2 md:col-span-1">
           <div>
               <p className="text-sm font-medium text-gray-500 mb-1">Top Performer</p>
               <h3 className={`text-xl font-bold ${COLORS.navy} truncate`}>{topPerformerName}</h3>
@@ -189,14 +189,15 @@ const EvaluationTab = ({ user }) => {
   const [allEvaluations, setAllEvaluations] = useState([]); 
   const [myEvaluations, setMyEvaluations] = useState([]);
 
+  const [defaultTemplates, setDefaultTemplates] = useState([]);
   const [customTemplates, setCustomTemplates] = useState([]);
-  const combinedTemplates = [...EVALUATION_TEMPLATES, ...customTemplates];
+  const combinedTemplates = [...defaultTemplates, ...customTemplates];
 
   const [showSendModal, setShowSendModal] = useState(false);
-  const [sendForm, setSendForm] = useState({ internId: "", supervisorId: "", evaluationType: "Regular", templateId: EVALUATION_TEMPLATES[0].id });
+  const [sendForm, setSendForm] = useState({ internId: "", supervisorId: "", evaluationType: "Regular", templateId: "" });
   const [sending, setSending] = useState(false);
 
-  const [formTemplate, setFormTemplate] = useState(EVALUATION_TEMPLATES[0]);
+  const [formTemplate, setFormTemplate] = useState(null);
   const initialFormState = { internId: "", internName: "", evaluationType: "", status: "draft", essayQuestions: {}, supervisorName: user?.name || "", evaluationDate: "" };
   const [evaluationForm, setEvaluationForm] = useState(initialFormState);
   
@@ -207,6 +208,47 @@ const EvaluationTab = ({ user }) => {
   const [performanceData, setPerformanceData] = useState({});
   const [internRankings, setInternRankings] = useState([]); 
   const [myBadges, setMyBadges] = useState([]);
+
+// 1. STRICT DEPARTMENT FILTERING (Expanded Keywords)
+  useEffect(() => {
+    // DEBUG: Look in your browser console to see exactly what string is causing the issue
+    console.log("Current User Role:", user?.role, "| Department ID:", user?.departmentId);
+
+    if (user && user.departmentId) {
+       // Force to string, uppercase, and remove spaces to catch weird DB formatting
+       const dept = String(user.departmentId).toUpperCase().replace(/\s+/g, '');
+       
+       // Massively expanded keyword dictionary to catch specific Philippine degree acronyms
+       const isCTE = dept.includes('CTE') || dept.includes('EDUC') || dept.includes('TEACH') || dept.includes('BSED') || dept.includes('BEED');
+       const isCBE = dept.includes('CBE') || dept.includes('BUSI') || dept.includes('ACCT') || dept.includes('ACCOUNT') || dept.includes('COMMERCE') || dept.includes('MANAGEMENT') || dept.includes('BSBA') || dept.includes('BSA');
+       const isCCS = dept.includes('CCS') || dept.includes('COMP') || dept.includes('INFO') || dept.includes('IT') || dept.includes('CS') || dept.includes('BSIT') || dept.includes('BSCS');
+
+       const restrictedTemplates = EVALUATION_TEMPLATES.filter(t => {
+          const templateString = `${t.id} ${t.title}`.toUpperCase();
+          
+          if (isCTE && templateString.includes('CTE')) return true;
+          if (isCBE && templateString.includes('CBE')) return true;
+          if (isCCS && (templateString.includes('CCS') || t.id.includes('site_supervisor'))) return true;
+          
+          return false;
+       });
+
+       // Strictly apply the filtered list. If it misses completely, it falls back to all.
+       setDefaultTemplates(restrictedTemplates.length > 0 ? restrictedTemplates : EVALUATION_TEMPLATES);
+    } else {
+       setDefaultTemplates(EVALUATION_TEMPLATES);
+    }
+  }, [user]);
+
+  // 2. AUTO-SELECT THE CORRECT TEMPLATE IN DROPDOWN
+  useEffect(() => {
+      if (combinedTemplates.length > 0) {
+          const isCurrentValid = combinedTemplates.some(t => t.id === sendForm.templateId);
+          if (!isCurrentValid) {
+              setSendForm(prev => ({ ...prev, templateId: combinedTemplates[0].id }));
+          }
+      }
+  }, [combinedTemplates, sendForm.templateId]);
 
   useEffect(() => {
     if (!user) return;
@@ -306,17 +348,41 @@ const EvaluationTab = ({ user }) => {
     try {
       if (formTemplate.id) {
         const templateRef = doc(db, "evaluation_templates", formTemplate.id);
-        await updateDoc(templateRef, { title: formTemplate.title, sections: formTemplate.sections, essays: formTemplate.essays, updatedAt: serverTimestamp() });
+        await updateDoc(templateRef, { title: formTemplate.title, gradingFormat: formTemplate.gradingFormat || "CTE_5_POINT", sections: formTemplate.sections, essays: formTemplate.essays, updatedAt: serverTimestamp() });
         toast.success("Template updated successfully!");
       } else {
-        await addDoc(collection(db, "evaluation_templates"), { title: formTemplate.title, sections: formTemplate.sections, essays: formTemplate.essays, createdBy: user.uid, departmentId: user.departmentId, createdAt: serverTimestamp() });
+        await addDoc(collection(db, "evaluation_templates"), { title: formTemplate.title, gradingFormat: formTemplate.gradingFormat || "CTE_5_POINT", sections: formTemplate.sections, essays: formTemplate.essays, createdBy: user.uid, departmentId: user.departmentId, createdAt: serverTimestamp() });
         toast.success("Custom template created successfully!");
       }
       setActiveView("dashboard");
     } catch (e) { console.error(e); toast.error("Failed to save template to database."); }
   };
 
-  const handleOpenBuilder = () => { setFormTemplate({ title: "New Custom Template", sections: [], essays: [] }); setActiveView('template_builder'); };
+ const handleOpenBuilder = () => { 
+      // Auto-detect the correct grading format based on expanded keywords
+      let defaultFormat = "CTE_5_POINT"; // Fallback
+      if (user?.departmentId) {
+          const dept = String(user.departmentId).toUpperCase().replace(/\s+/g, '');
+          
+          if (dept.includes('CCS') || dept.includes('COMP') || dept.includes('INFO') || dept.includes('IT') || dept.includes('CS') || dept.includes('BSIT') || dept.includes('BSCS')) {
+              defaultFormat = "CSS_LETTER";
+          }
+          if (dept.includes('CBE') || dept.includes('BUSI') || dept.includes('ACCT') || dept.includes('ACCOUNT') || dept.includes('COMMERCE') || dept.includes('MANAGEMENT') || dept.includes('BSBA') || dept.includes('BSA')) {
+              defaultFormat = "CBE_100_POINT";
+          }
+          if (dept.includes('CTE') || dept.includes('EDUC') || dept.includes('TEACH') || dept.includes('BSED') || dept.includes('BEED')) {
+              defaultFormat = "CTE_5_POINT";
+          }
+      }
+
+      setFormTemplate({ 
+          title: "", 
+          gradingFormat: defaultFormat, 
+          sections: [], 
+          essays: [] 
+      }); 
+      setActiveView('template_builder'); 
+  };
   const handleEditTemplate = (template) => { setFormTemplate(template); setActiveView('template_builder'); };
   const handleDeleteTemplate = async (templateId) => {
       if (!window.confirm("Are you sure you want to delete this template? This action cannot be undone.")) return;
@@ -337,7 +403,7 @@ const EvaluationTab = ({ user }) => {
       await addDoc(collection(db, "evaluations"), { internId: sendForm.internId, internName: selectedIntern.name || `${selectedIntern.firstName} ${selectedIntern.lastName}`, supervisorId: sendForm.supervisorId, evaluationType: sendForm.evaluationType, status: "pending_supervisor", sentBy: user.uid, savedTemplateSnapshot: selectedTemplate, createdAt: serverTimestamp() });
       toast.success(`${sendForm.evaluationType} sent successfully!`);
       setShowSendModal(false);
-      setSendForm({ internId: "", supervisorId: "", evaluationType: "Regular", templateId: EVALUATION_TEMPLATES[0].id });
+      setSendForm({ internId: "", supervisorId: "", evaluationType: "Regular", templateId: defaultTemplates.length > 0 ? defaultTemplates[0].id : "" });
     } catch (err) { console.error(err); toast.error("Failed to send form."); } finally { setSending(false); }
   };
 
@@ -357,12 +423,13 @@ const EvaluationTab = ({ user }) => {
         }
     }
     try {
-// Find these two lines inside handleSaveEvaluation:
-const overallScore = calculateOverallScore(evaluationForm, formTemplate.sections, formTemplate.gradingFormat);
-const sectionScores = {};
-formTemplate.sections.forEach(sec => { sectionScores[sec.title] = calculateSectionScore(evaluationForm[sec.id], formTemplate.gradingFormat); });
+      const overallScore = calculateOverallScore(evaluationForm, formTemplate.sections, formTemplate.gradingFormat);
+      const sectionScores = {};
+      formTemplate.sections.forEach(sec => { sectionScores[sec.title] = calculateSectionScore(evaluationForm[sec.id], formTemplate.gradingFormat); });
+      
       const dataToSave = { ...evaluationForm, status, overallScore, sectionScores, updatedAt: serverTimestamp() };
       if (status === "submitted") dataToSave.submittedAt = serverTimestamp();
+      
       await updateDoc(doc(db, "evaluations", editingEvaluation.id), dataToSave); 
       toast.success(`Evaluation ${status === 'draft' ? 'saved' : 'submitted'}!`);
       setActiveView("dashboard"); setEvaluationForm(initialFormState); setEditingEvaluation(null); setIsEditMode(false);
@@ -459,13 +526,13 @@ formTemplate.sections.forEach(sec => { sectionScores[sec.title] = calculateSecti
       } catch (err) { console.error("PDF Error:", err); toast.dismiss("pdf-form-toast"); toast.error("Failed to generate PDF."); }
   };
 
-  const addSection = () => setFormTemplate(p => ({ ...p, sections: [...p.sections, { id: `sec_${Date.now()}`, title: "New Section", items: [] }] }));
-  const removeSection = (id) => { if(confirm("Remove section?")) setFormTemplate(p => ({ ...p, sections: p.sections.filter(s => s.id !== id) })); };
+  const addSection = () => setFormTemplate(p => ({ ...p, sections: [...p.sections, { id: `sec_${Date.now()}`, title: "", items: [] }] }));
+  const removeSection = (id) => { if(window.confirm("Remove section?")) setFormTemplate(p => ({ ...p, sections: p.sections.filter(s => s.id !== id) })); };
   const updateSectionTitle = (id, v) => setFormTemplate(p => ({ ...p, sections: p.sections.map(s => s.id === id ? { ...s, title: v } : s) }));
-  const addQuestion = (sid) => setFormTemplate(p => ({ ...p, sections: p.sections.map(s => s.id === sid ? { ...s, items: [...s.items, { id: `q_${Date.now()}`, text: "New Question" }] } : s) }));
+  const addQuestion = (sid) => setFormTemplate(p => ({ ...p, sections: p.sections.map(s => s.id === sid ? { ...s, items: [...s.items, { id: `q_${Date.now()}`, text: "" }] } : s) }));
   const removeQuestion = (sid, qid) => setFormTemplate(p => ({ ...p, sections: p.sections.map(s => s.id === sid ? { ...s, items: s.items.filter(i => i.id !== qid) } : s) }));
   const updateQuestionText = (sid, qid, v) => setFormTemplate(p => ({ ...p, sections: p.sections.map(s => s.id === sid ? { ...s, items: s.items.map(i => i.id === qid ? { ...i, text: v } : s) } : s) }));
-  const addEssay = () => setFormTemplate(p => ({ ...p, essays: [...p.essays, { id: `es_${Date.now()}`, question: "New Essay", placeholder: "..." }] }));
+  const addEssay = () => setFormTemplate(p => ({ ...p, essays: [...p.essays, { id: `es_${Date.now()}`, question: "", placeholder: "..." }] }));
   const removeEssay = (id) => setFormTemplate(p => ({ ...p, essays: p.essays.filter(e => e.id !== id) }));
   const updateEssayText = (id, v) => setFormTemplate(p => ({ ...p, essays: p.essays.map(e => e.id === id ? { ...e, question: v } : e) }));
 
@@ -474,11 +541,21 @@ formTemplate.sections.forEach(sec => { sectionScores[sec.title] = calculateSecti
     setEvaluationForm(prev => ({ ...prev, [sectionId]: { ...(prev[sectionId] || {}), [itemId]: rating } }));
   };
 
-  const handleEditEvaluation = (ev) => {
-    if (ev.status === "submitted" && user.role !== 'supervisor') return handleViewEvaluation(ev);
+const handleEditEvaluation = (ev) => {
+    // STRICT RBAC: Only the explicitly assigned supervisor can edit a pending/draft evaluation.
+    const isAssignedSupervisor = user.role === 'supervisor' && ev.supervisorId === user.uid;
+    const isEditableStatus = ev.status === 'draft' || ev.status === 'pending_supervisor';
+
+    if (!isAssignedSupervisor || !isEditableStatus) {
+        // Force view-only mode for Coordinators, Interns, or if it's already submitted.
+        return handleViewEvaluation(ev);
+    }
+
     setEvaluationForm({ ...initialFormState, ...ev });
     if (ev.savedTemplateSnapshot) setFormTemplate(ev.savedTemplateSnapshot);
-    setEditingEvaluation(ev); setIsEditMode(true); setActiveView("form");
+    setEditingEvaluation(ev); 
+    setIsEditMode(true); 
+    setActiveView("form");
   };
   
   const handleViewEvaluation = (ev) => {
@@ -490,8 +567,8 @@ formTemplate.sections.forEach(sec => { sectionScores[sec.title] = calculateSecti
   const handleViewCertificate = (ev) => { const intern = allInterns.find(i => i.uid === ev.internId); setViewingCertificate({ evaluation: ev, intern }); };
   const resetForm = () => { setEvaluationForm(initialFormState); setEditingEvaluation(null); setIsEditMode(false); };
   
-  const dataProps = { supervisors, customTemplates, evaluations: myEvaluations, allEvaluations, myInterns, allInterns, internRankings, myBadges, performanceData, evaluationForm, editingEvaluation, isEditMode, ratingScale, formTemplate, badgeDefinitions, calculateSectionScore, calculateOverallScore };
-  const handlerProps = { setActiveView, handleChangeInternStatus, handleComputeOfficialGrade, handleEditEvaluation, handleViewEvaluation, resetEvaluationForm: resetForm, handleSaveEvaluation, handleRatingChange, handleViewCertificate, handlePrintEvaluation, handlePDF, handleFormChange: (f, v) => setEvaluationForm(p => ({...p, [f]: v})), handleEssayAnswerChange: (id, v) => setEvaluationForm(p => ({...p, essayQuestions: {...p.essayQuestions, [id]: v}})), addSection, removeSection, updateSectionTitle, addQuestion, removeQuestion, updateQuestionText, addEssay, removeEssay, updateEssayText, updateTemplateTitle: (v) => setFormTemplate(p => ({...p, title: v})), handleSaveCustomTemplate, handleEditTemplate, handleDeleteTemplate };
+  const dataProps = { supervisors, customTemplates, defaultTemplates, combinedTemplates, evaluations: myEvaluations, allEvaluations, myInterns, allInterns, internRankings, myBadges, performanceData, evaluationForm, editingEvaluation, isEditMode, ratingScale, formTemplate, badgeDefinitions, calculateSectionScore, calculateOverallScore };
+  const handlerProps = { setActiveView, handleChangeInternStatus, handleComputeOfficialGrade, handleEditEvaluation, handleViewEvaluation, resetEvaluationForm: resetForm, handleSaveEvaluation, handleRatingChange, handleViewCertificate, handlePrintEvaluation, handlePDF, handleFormChange: (f, v) => setEvaluationForm(p => ({...p, [f]: v})), handleEssayAnswerChange: (id, v) => setEvaluationForm(p => ({...p, essayQuestions: {...p.essayQuestions, [id]: v}})), addSection, removeSection, updateSectionTitle, addQuestion, removeQuestion, updateQuestionText, addEssay, removeEssay, updateEssayText, updateTemplateTitle: (v) => setFormTemplate(p => ({...p, title: v})), updateTemplateGradingFormat: (v) => setFormTemplate(p => ({...p, gradingFormat: v})), handleSaveCustomTemplate, handleEditTemplate, handleDeleteTemplate };
 
   return (
     <>
@@ -522,7 +599,7 @@ formTemplate.sections.forEach(sec => { sectionScores[sec.title] = calculateSecti
                 </select>
                 <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">{myInterns.find(i => i.uid === sendForm.internId)?.supervisorId === sendForm.supervisorId ? "This is the intern's currently assigned supervisor." : "Select the supervisor who will evaluate this intern."}</p>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                 <div className="space-y-1.5"><label className="block text-sm font-bold text-gray-700">Evaluation Phase</label><select required value={sendForm.evaluationType} onChange={(e) => setSendForm({...sendForm, evaluationType: e.target.value})} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-[#0094FF] bg-gray-50 hover:bg-white cursor-pointer"><option value="Regular">Regular Evaluation</option><option value="Midterm">Midterm Evaluation</option><option value="Final">Final Evaluation</option></select></div>
                 <div className="space-y-1.5"><label className="block text-sm font-bold text-gray-700">Template</label><select required value={sendForm.templateId} onChange={(e) => setSendForm({...sendForm, templateId: e.target.value})} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-[#0094FF] bg-gray-50 hover:bg-white cursor-pointer">{combinedTemplates.map(t => (<option key={t.id} value={t.id}>{t.title}</option>))}</select></div>
               </div>
@@ -542,9 +619,9 @@ formTemplate.sections.forEach(sec => { sectionScores[sec.title] = calculateSecti
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 no-print">
             <div><h1 className="text-2xl md:text-3xl font-bold text-gray-900">Evaluations & Performance</h1><p className="text-gray-600">{user.role === 'coordinator' ? "Send forms and manage evaluation templates." : "Check your pending action items and submit grades."}</p></div>
             {user.role === 'coordinator' && activeView === 'dashboard' && (
-              <div className="flex gap-2">
-                  <button onClick={handleOpenBuilder} className="flex items-center gap-2 bg-white text-[#0094FF] border border-[#0094FF] px-5 py-2.5 rounded-lg font-medium shadow-sm transition-all hover:bg-blue-50 active:scale-95"><Plus className="w-5 h-5" /><span>Create Template</span></button>
-                  <button onClick={() => setShowSendModal(true)} className="flex items-center gap-2 bg-[#0094FF] text-white px-5 py-2.5 rounded-lg font-medium shadow-md transition-all active:scale-95 hover:bg-[#002B66]"><Send className="w-5 h-5" /><span>Send Form</span></button>
+              <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                  <button onClick={handleOpenBuilder} className="flex-1 md:flex-none justify-center items-center gap-2 bg-white text-[#0094FF] border border-[#0094FF] px-5 py-2.5 rounded-lg font-medium shadow-sm transition-all hover:bg-blue-50 active:scale-95 flex"><Plus className="w-5 h-5" /><span>Create Template</span></button>
+                  <button onClick={() => setShowSendModal(true)} className="flex-1 md:flex-none justify-center items-center gap-2 bg-[#0094FF] text-white px-5 py-2.5 rounded-lg font-medium shadow-md transition-all active:scale-95 hover:bg-[#002B66] flex"><Send className="w-5 h-5" /><span>Send Form</span></button>
               </div>
             )}
         </div>

@@ -58,7 +58,7 @@ export const translateFinalGrade = (baseScore, formatType) => {
 export const EVALUATION_TEMPLATES = [
   {
     id: "eval_site_supervisor",
-    title: "SITE SUPERVISOR'S EVALUATION OF STUDENT INTERN'S PERFORMANCE", 
+    title: "CCS INTERNSHIP RATING FORM", 
     gradingFormat: "CSS_LETTER", 
     sections: [
       {
@@ -129,7 +129,7 @@ export const EVALUATION_TEMPLATES = [
   },
   {
     id: "eval_cte_performance",
-    title: "CTE PERFORMANCE FEEDBACK FORM", 
+    title: "CTE INTERNSHIP RATING FORM", 
     gradingFormat: "CTE_5_POINT", 
     sections: [
       {
@@ -227,9 +227,9 @@ export const EVALUATION_TEMPLATES = [
       }
     ],
     essays: [
-      { id: "essay_cbe_1", question: "26. What are the intern's strengths observed during the internship?", placeholder: "Detail observed strengths..." }, 
-      { id: "essay_cbe_2", question: "27. What are the intern's areas for improvement?", placeholder: "Detail areas for improvement..." }, 
-      { id: "essay_cbe_3", question: "28. Would you consider hiring this intern in the future?", placeholder: "Yes / No / Maybe (Please explain why)" } 
+      { id: "essay_cbe_1", question: "What are the intern's strengths observed during the internship?", placeholder: "Detail observed strengths..." }, 
+      { id: "essay_cbe_2", question: "What are the intern's areas for improvement?", placeholder: "Detail areas for improvement..." }, 
+      { id: "essay_cbe_3", question: "Would you consider hiring this intern in the future?", placeholder: "Yes / No / Maybe (Please explain why)" } 
     ]
   }
 ];
