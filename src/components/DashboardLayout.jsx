@@ -121,9 +121,10 @@ export default function DashboardLayout({ children, tabs, activeTab, setActiveTa
       </aside>
 
       {/* --- MOBILE BOTTOM NAV --- */}
+{/* --- MOBILE BOTTOM NAV --- */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-sidebar-bg/95 backdrop-blur-md border-t-2 border-sidebar-border">
         <div className="flex justify-around items-center px-3 py-2">
-          {tabs.slice(0, 4).map(tab => {
+          {tabs.slice(0, 5).map(tab => {
             const active = activeTab === tab.id;
             return (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 flex flex-col items-center gap-1 py-2 px-1 rounded-2xl transition-all duration-200 ${active ? 'text-sidebar-text' : 'text-sidebar-muted'}`}>

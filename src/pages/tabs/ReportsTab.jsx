@@ -402,17 +402,28 @@ function ReportsTab({ user }) {
       {/* --- DASHBOARD --- */}
       {isManager && activeTab === "accomplishments" && <SupervisorDashboard relevantReports={relevantReports} />}
 
-      {/* --- PILL TABS NAVIGATION --- */}
-      <div className="flex space-x-2 bg-white p-1 rounded-lg border border-gray-200 w-fit mb-6 shadow-sm overflow-x-auto">
-        <button onClick={() => setActiveTab("accomplishments")} className={`flex items-center space-x-2 px-4 py-2 rounded-md font-medium transition-colors whitespace-nowrap ${activeTab === "accomplishments" ? "bg-[#0094FF] text-white shadow" : "text-gray-600 hover:bg-gray-50"}`}>
+{/* --- PILL TABS NAVIGATION --- */}
+      <div className="flex space-x-2 bg-white p-1 rounded-lg border border-gray-200 max-w-full w-max overflow-x-auto mb-6 shadow-sm sm:w-fit">
+        <button 
+          onClick={() => setActiveTab("accomplishments")} 
+          className={`flex-shrink-0 flex items-center space-x-2 px-4 py-2 rounded-md font-medium transition-colors whitespace-nowrap ${activeTab === "accomplishments" ? "bg-[#0094FF] text-white shadow" : "text-gray-600 hover:bg-gray-50"}`}
+        >
             <FileText size={18} /> <span>Inbox & History</span>
         </button>
+        
         {isManager && (
-            <button onClick={() => setActiveTab("status")} className={`flex items-center space-x-2 px-4 py-2 rounded-md font-medium transition-colors whitespace-nowrap ${activeTab === "status" ? "bg-[#0094FF] text-white shadow" : "text-gray-600 hover:bg-gray-50"}`}>
+            <button 
+              onClick={() => setActiveTab("status")} 
+              className={`flex-shrink-0 flex items-center space-x-2 px-4 py-2 rounded-md font-medium transition-colors whitespace-nowrap ${activeTab === "status" ? "bg-[#0094FF] text-white shadow" : "text-gray-600 hover:bg-gray-50"}`}
+            >
                 <CheckSquare size={18} /> <span>Submission Status</span>
             </button>
         )}
-        <button onClick={() => setActiveTab("attendance")} className={`flex items-center space-x-2 px-4 py-2 rounded-md font-medium transition-colors whitespace-nowrap ${activeTab === "attendance" ? "bg-[#0094FF] text-white shadow" : "text-gray-600 hover:bg-gray-50"}`}>
+        
+        <button 
+          onClick={() => setActiveTab("attendance")} 
+          className={`flex-shrink-0 flex items-center space-x-2 px-4 py-2 rounded-md font-medium transition-colors whitespace-nowrap ${activeTab === "attendance" ? "bg-[#0094FF] text-white shadow" : "text-gray-600 hover:bg-gray-50"}`}
+        >
             <Calendar size={18} /> <span>Attendance DTR</span>
         </button>
       </div>
