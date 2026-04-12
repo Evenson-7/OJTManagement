@@ -3,7 +3,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../firebaseConfig';
 import { Toaster } from 'react-hot-toast'; 
-import InternManagementSection from './InternManagementSection';
 import InternOver from '../../components/InternOver'; 
 import LogAttendance from '../../components/LogAttendance'; 
 
@@ -107,14 +106,6 @@ function OverviewTab({ user, setActiveTab }) {
           {(user?.role === 'supervisor' || user?.role === 'coordinator') && (
             <div className="space-y-8 animate-fadeIn">
               <InternOver user={user} onShowLogs={() => setShowLogs(true)} />
-              
-              {user?.role === 'supervisor' && (
-                <div className="pt-4">
-                  <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Appoint Intern</h1>
-                  <p className="text-gray-600 mt-1 mb-6">Manage your assigned interns and quick access tools below.</p>
-                  <InternManagementSection user={user} />
-                </div>
-              )}
             </div>
           )}
 

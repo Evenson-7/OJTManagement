@@ -13,6 +13,7 @@ import DashboardLayout from "../components/DashboardLayout";
 
 // --- TABS & COMPONENTS ---
 import OverviewTab from "../pages/tabs/OverviewTab";
+import ManageInternsTab from "../pages/tabs/ManageInternsTab"; // <-- NEW IMPORT
 import ReportsTab from "../pages/tabs/ReportsTab";
 import EvaluationTab from "../pages/tabs/EvaluationTab";
 
@@ -23,6 +24,13 @@ const EvaluationsIcon = ({ className = "w-5 h-5" }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
           d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+  </svg>
+);
+
+// <-- NEW ICON FOR MANAGE INTERNS -->
+const UsersIcon = ({ className = "w-5 h-5" }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
   </svg>
 );
 
@@ -56,11 +64,18 @@ function Dashboard() {
   // 3. Define Tabs based on Role (Intern vs Supervisor)
   const getAvailableTabs = () => {
     const base = [
-      { id: "overview",   name: "Overview",   icon: OverviewIcon },
-      { id: "evaluation", name: "Evaluation", icon: EvaluationsIcon },
+      { id: "overview",   name: "Dashboard",   icon: OverviewIcon }, // Renamed from Overview
     ];
-    if (user?.role === "supervisor")  base.push({ id: "reports", name: "Reports",    icon: ReportsIcon });
-    else if (user?.role === "intern") base.push({ id: "reports", name: "My Reports", icon: MyReportsIcon });
+    
+    if (user?.role === "supervisor") {
+      base.push({ id: "manage", name: "Manage Interns", icon: UsersIcon }); // <-- NEW TAB
+      base.push({ id: "evaluation", name: "Evaluation", icon: EvaluationsIcon });
+      base.push({ id: "reports", name: "Reports",    icon: ReportsIcon });
+    } 
+    else if (user?.role === "intern") {
+      base.push({ id: "evaluation", name: "Evaluation", icon: EvaluationsIcon });
+      base.push({ id: "reports", name: "My Reports", icon: MyReportsIcon });
+    }
     return base;
   };
 
@@ -71,6 +86,7 @@ function Dashboard() {
     const props = { user, setActiveTab };
     switch (activeTab) {
       case "overview":   return <OverviewTab   {...props} />;
+      case "manage":     return <ManageInternsTab {...props} />; // <-- NEW ROUTE
       case "reports":    return <ReportsTab    {...props} />;
       case "evaluation": return <EvaluationTab {...props} />;
       default:           return <OverviewTab   {...props} />;
