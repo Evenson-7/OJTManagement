@@ -14,8 +14,10 @@ const COLOR_HEX_MAP = { green: "#22c55e", blue: "#3b82f6", yellow: "#eab308", or
 
 const EvaluationForm = ({ data, handlers, user }) => {
     const { formTemplate, evaluationForm, isEditMode, editingEvaluation } = data;
-    const isSubmitted = evaluationForm.status === "submitted" || evaluationForm.status === "completed";
-    const isReadOnly = isSubmitted && (!isEditMode || editingEvaluation);
+    
+    // FIX: Strictly bind read-only state to the 'isEditMode' flag to completely prevent unauthorized edits.
+    // If the system didn't explicitly open this as an assignment for the assigned supervisor, lock it down.
+    const isReadOnly = !isEditMode;
     
     const formatType = formTemplate?.gradingFormat || "CTE_5_POINT";
     const guide = GRADE_CONVERSION_GUIDE[formatType] || GRADE_CONVERSION_GUIDE["CTE_5_POINT"];
@@ -25,7 +27,7 @@ const EvaluationForm = ({ data, handlers, user }) => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 no-print">
           <button onClick={() => handlers.setActiveView("dashboard")} className="text-gray-500 hover:bg-gray-100 px-3 py-2 rounded font-medium w-full sm:w-auto text-left sm:text-center border border-transparent hover:border-gray-200">← Back to Inbox</button>
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            {isSubmitted && (
+            {evaluationForm.status === "submitted" && (
                 <>
                     <button onClick={() => handlers.handlePDF(REPORT_ID)} className="flex-1 sm:flex-none justify-center px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 flex items-center gap-2 shadow-sm transition-colors text-sm font-medium"><HiOutlineArrowDownTray size={16} /> Export PDF</button>
                     <button onClick={() => handlers.handlePrintEvaluation(REPORT_ID)} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-black flex items-center gap-2 shadow-sm transition-colors text-sm font-medium"><HiOutlinePrinter size={16} /> Print</button>
@@ -118,40 +120,22 @@ const EvaluationForm = ({ data, handlers, user }) => {
                                     max="100" 
                                     value={(evaluationForm[section.id]||{})[item.id] || ''} 
                                     onKeyDown={(e) => {
-                                        // Prevent manual typing of +, -, e, etc.
                                         if (['e', 'E', '+', '-', '.'].includes(e.key)) e.preventDefault();
                                     }}
                                     onChange={(e) => {
                                         let val = e.target.value;
-                                        
-                                        // Limit to 3 characters max
                                         if (val.length > 3) val = val.slice(0, 3);
-                                        
                                         if (val !== "") {
                                             const num = Number(val);
-                                            
-                                            // 1. Cap at 100 instantly
-                                            if (num > 100) {
-                                                val = "100";
-                                            } 
-                                            // 2. The "10" Exception: If it's 2+ digits, less than 75, BUT is NOT "10" (which is needed to type 100)
-                                            else if (val.length >= 2 && num < 75 && val !== "10") {
-                                                val = "75";
-                                            }
-                                            // 3. Catch invalid first digits instantly (0, 2, 3, 4, 5, 6)
-                                            else if (val.length === 1 && [0, 1, 2, 3, 4, 5, 6].includes(num)) {
-                                                val = "75";
-                                            }
+                                            if (num > 100) { val = "100"; } 
+                                            else if (val.length >= 2 && num < 75 && val !== "10") { val = "75"; }
+                                            else if (val.length === 1 && [0, 1, 2, 3, 4, 5, 6].includes(num)) { val = "75"; }
                                         }
-                                        
                                         handlers.handleRatingChange(section.id, item.id, val);
                                     }} 
                                     onBlur={(e) => {
                                         let val = e.target.value;
-                                        // 4. Safety net: If they type a valid first digit like "7" but click away before finishing
-                                        if (val !== "" && Number(val) < 75) {
-                                            handlers.handleRatingChange(section.id, item.id, "75");
-                                        }
+                                        if (val !== "" && Number(val) < 75) { handlers.handleRatingChange(section.id, item.id, "75"); }
                                     }}
                                     disabled={isReadOnly}
                                     placeholder="75-100"

@@ -35,9 +35,10 @@ const PlusIcon = ({ className }) => (<svg className={className} fill="none" view
 const XIcon = ({ className }) => (<svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>);
 const EyeIcon = ({ className }) => (<svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>);
 const EyeOffIcon = ({ className }) => (<svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>);
+const ExternalLinkIcon = ({ className }) => (<svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>);
 
-// --- REUSABLE HEADER COMPONENT MOVED OUTSIDE MAIN COMPONENT ---
-const FilterHeader = ({ title, showDeptFilter = true, rightAction = null, searchTerm, setSearchTerm, filterDept, setFilterDept }) => (
+// --- REUSABLE HEADER COMPONENT ---
+const FilterHeader = ({ title, showDeptFilter = true, isDeptLocked = false, rightAction = null, searchTerm, setSearchTerm, filterDept, setFilterDept }) => (
   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
     <h3 className="text-xl font-bold text-sidebar-text">{title}</h3>
     <div className="flex flex-col sm:flex-row gap-3">
@@ -56,8 +57,9 @@ const FilterHeader = ({ title, showDeptFilter = true, rightAction = null, search
           <FilterIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-sidebar-muted" />
           <select 
             value={filterDept} 
-            onChange={(e) => setFilterDept(e.target.value)} 
-            className="pl-10 pr-8 py-2 border-[1.5px] border-sidebar-border rounded-xl focus:ring-2 focus:ring-brand-pastel focus:border-brand-primary outline-none appearance-none bg-white cursor-pointer hover:border-brand-pastel transition-all w-full sm:w-auto font-medium text-sidebar-text"
+            onChange={(e) => setFilterDept(e.target.value)}
+            disabled={isDeptLocked}
+            className={`pl-10 pr-8 py-2 border-[1.5px] border-sidebar-border rounded-xl focus:ring-2 focus:ring-brand-pastel focus:border-brand-primary outline-none appearance-none bg-white transition-all w-full sm:w-auto font-medium text-sidebar-text ${isDeptLocked ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:border-brand-pastel'}`}
           >
             <option value="all">All Departments</option>
             {COLLEGES.map((col) => (<option key={col.id} value={col.id}>{col.code} - {col.name}</option>))}
@@ -92,6 +94,11 @@ function CorDash() {
     phoneNumber: '', companyName: '', department: '', position: ''
   });
 
+  // View Interns Modal State
+  const [viewInternsModalOpen, setViewInternsModalOpen] = useState(false);
+  const [selectedSupervisor, setSelectedSupervisor] = useState(null);
+  const [selectedSupInterns, setSelectedSupInterns] = useState([]);
+
   const tabs = [
     { id: "overview", name: "Overview", icon: OverviewIcon },
     { id: "supervisors", name: "Supervisors", icon: SupervisorIcon },
@@ -117,12 +124,35 @@ function CorDash() {
       const supList = supSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setSupervisors(supList);
 
-      const internQuery = query(usersRef, where("role", "==", "intern")); 
-      const internSnap = await getDocs(internQuery); 
-      const internList = internSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setInterns(internList);
+      const internQuery = user?.departmentId
+        ? query(usersRef, where("role", "==", "intern"), where("departmentId", "==", user.departmentId))
+        : query(usersRef, where("role", "==", "intern"));
+      const internSnap = await getDocs(internQuery);
+      
+      const internListWithStatus = await Promise.all(internSnap.docs.map(async (docSnap) => {
+          const data = docSnap.data();
+          const id = docSnap.id;
+          
+          const attQuery = query(collection(db, "attendance"), where("internId", "==", id));
+          const attDocs = await getDocs(attQuery);
+          
+          let totalHours = 0;
+          attDocs.forEach(d => {
+              const hw = d.data().hoursWorked;
+              if (hw) totalHours += parseFloat(hw);
+          });
+          
+          const reqHours = data.requiredHours || 486;
+          return {
+              id,
+              ...data,
+              completedHours: totalHours,
+              ojtStatus: totalHours >= reqHours ? 'Completed' : 'Ongoing'
+          };
+      }));
 
-      setStats({ supervisors: supSnap.size, interns: internSnap.size });
+      setInterns(internListWithStatus);
+      setStats({ supervisors: supSnap.size, interns: internListWithStatus.length });
     } catch (error) {
       toast.error("Failed to load data");
     } finally {
@@ -214,6 +244,33 @@ function CorDash() {
     });
   };
 
+  const getSupervisorStats = (supId) => {
+    const supInterns = interns.filter(i => i.supervisorId === supId);
+    const total = supInterns.length;
+    const completed = supInterns.filter(i => i.ojtStatus === 'Completed').length;
+    const ongoing = supInterns.filter(i => i.ojtStatus === 'Ongoing').length;
+    return { total, completed, ongoing };
+  };
+
+  const handleViewInterns = (supId, supName) => {
+    const supInterns = interns.filter(i => i.supervisorId === supId);
+    const sortedInterns = [...supInterns].sort((a, b) => {
+       const rawNameA = a.name || `${a.firstName || ''} ${a.lastName || ''}`.trim();
+       const partsA = rawNameA.split(' ');
+       const lastA = a.lastName || (partsA.length > 1 ? partsA[partsA.length - 1] : rawNameA);
+
+       const rawNameB = b.name || `${b.firstName || ''} ${b.lastName || ''}`.trim();
+       const partsB = rawNameB.split(' ');
+       const lastB = b.lastName || (partsB.length > 1 ? partsB[partsB.length - 1] : rawNameB);
+
+       return lastA.toLowerCase().localeCompare(lastB.toLowerCase());
+    });
+
+    setSelectedSupInterns(sortedInterns);
+    setSelectedSupervisor({ id: supId, name: supName });
+    setViewInternsModalOpen(true);
+  };
+
   const renderContent = () => {
     if (loading) return <div className="text-sidebar-muted animate-pulse font-semibold">Loading data...</div>;
 
@@ -244,6 +301,19 @@ function CorDash() {
         
       case "supervisors":
         const filteredSupervisors = supervisors.filter(s => (s.name || "").toLowerCase().includes(searchTerm.toLowerCase()) || (s.companyName || "").toLowerCase().includes(searchTerm.toLowerCase()));
+        
+        const sortedSupervisors = [...filteredSupervisors].sort((a, b) => {
+           const rawNameA = a.name || `${a.firstName || ''} ${a.lastName || ''}`.trim();
+           const partsA = rawNameA.split(' ');
+           const lastA = a.lastName || (partsA.length > 1 ? partsA[partsA.length - 1] : rawNameA);
+    
+           const rawNameB = b.name || `${b.firstName || ''} ${b.lastName || ''}`.trim();
+           const partsB = rawNameB.split(' ');
+           const lastB = b.lastName || (partsB.length > 1 ? partsB[partsB.length - 1] : rawNameB);
+    
+           return lastA.toLowerCase().localeCompare(lastB.toLowerCase());
+        });
+
         return (
           <div className="bg-white p-6 rounded-3xl shadow-[0_2px_12px_rgba(66,165,255,0.08)] border-[1.5px] border-sidebar-border animate-fadeIn">
             <FilterHeader 
@@ -261,22 +331,55 @@ function CorDash() {
             />
             <div className="overflow-hidden border border-sidebar-border rounded-2xl">
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[600px]">
+                <table className="w-full text-left border-collapse min-w-[850px]">
                   <thead>
                     <tr className="bg-sidebar-bg border-b border-sidebar-border text-[11px] uppercase tracking-wider text-sidebar-muted font-bold">
-                      <th className="px-6 py-4">Name</th><th className="px-6 py-4">Company</th><th className="px-6 py-4">Department</th><th className="px-6 py-4">Email</th>
+                      <th className="px-6 py-4 w-[30%]">Supervisor Details</th>
+                      <th className="px-6 py-4 w-[25%]">Company & Dept</th>
+                      <th className="px-6 py-4 w-[30%]">Assigned Interns</th>
+                      <th className="px-6 py-4 w-[15%] text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-sidebar-border/50">
-                    {filteredSupervisors.map((sup) => (
-                      <tr key={sup.id} className="hover:bg-sidebar-bg/50 transition-colors">
-                        <td className="px-6 py-4 font-bold text-sidebar-text">{sup.name || `${sup.firstName} ${sup.lastName}`}</td>
-                        <td className="px-6 py-4 text-sidebar-muted font-medium">{sup.companyName || 'N/A'}</td>
-                        <td className="px-6 py-4 text-sidebar-muted font-medium">{sup.department || 'N/A'}</td>
-                        <td className="px-6 py-4 text-sidebar-muted font-medium">{sup.email}</td>
-                      </tr>
-                    ))}
-                    {filteredSupervisors.length === 0 && <tr><td colSpan="4" className="p-8 text-center text-sidebar-muted font-medium">No supervisors match your search.</td></tr>}
+                    {sortedSupervisors.map((sup) => {
+                      const supStats = getSupervisorStats(sup.id);
+                      return (
+                        <tr key={sup.id} className="hover:bg-sidebar-bg/50 transition-colors">
+                          <td className="px-6 py-4">
+                             <p className="font-bold text-sidebar-text">{sup.name || `${sup.firstName} ${sup.lastName}`}</p>
+                             <p className="text-xs text-sidebar-muted">{sup.email}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                             <p className="font-medium text-sidebar-text">{sup.companyName || 'N/A'}</p>
+                             <p className="text-xs text-sidebar-muted">{sup.department || 'N/A'}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                             <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-sidebar-text text-sm">{supStats.total} Total</span>
+                                {supStats.total > 0 && (
+                                  <>
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#E0F2FE] text-[#0284C7] font-bold">Ongoing: {supStats.ongoing}</span>
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#D1FAE5] text-[#059669] font-bold">Completed: {supStats.completed}</span>
+                                  </>
+                                )}
+                             </div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                             {supStats.total > 0 ? (
+                                <button 
+                                   onClick={() => handleViewInterns(sup.id, sup.name || `${sup.firstName} ${sup.lastName}`)}
+                                   className="text-xs font-bold bg-[#E0F2FE] text-[#0284C7] hover:bg-[#0284C7] hover:text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 ml-auto"
+                                >
+                                   View Interns <ExternalLinkIcon className="w-4 h-4" />
+                                </button>
+                             ) : (
+                                <span className="text-[11px] text-sidebar-muted italic mr-2">No interns</span>
+                             )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {sortedSupervisors.length === 0 && <tr><td colSpan="4" className="p-8 text-center text-sidebar-muted font-medium">No supervisors match your search.</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -286,11 +389,26 @@ function CorDash() {
         
       case "interns":
         const displayedInterns = getFilteredInterns();
+
+        // FIX: Applied the Smart Last Name Extraction sort logic to the Interns List
+        const sortedDisplayedInterns = [...displayedInterns].sort((a, b) => {
+           const rawNameA = a.name || `${a.firstName || ''} ${a.lastName || ''}`.trim();
+           const partsA = rawNameA.split(' ');
+           const lastA = a.lastName || (partsA.length > 1 ? partsA[partsA.length - 1] : rawNameA);
+
+           const rawNameB = b.name || `${b.firstName || ''} ${b.lastName || ''}`.trim();
+           const partsB = rawNameB.split(' ');
+           const lastB = b.lastName || (partsB.length > 1 ? partsB[partsB.length - 1] : rawNameB);
+
+           return lastA.toLowerCase().localeCompare(lastB.toLowerCase());
+        });
+
         return (
           <div className="bg-white p-6 rounded-3xl shadow-[0_2px_12px_rgba(66,165,255,0.08)] border-[1.5px] border-sidebar-border animate-fadeIn">
             <FilterHeader 
               title="Managed Interns" 
-              showDeptFilter={true} 
+              showDeptFilter={true}
+              isDeptLocked={!!user?.departmentId}
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
               filterDept={filterDept}
@@ -306,7 +424,8 @@ function CorDash() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-sidebar-border/50">
-                    {displayedInterns.map((intern) => {
+                    {/* Render the sorted array here */}
+                    {sortedDisplayedInterns.map((intern) => {
                       const supervisorName = getSupervisorName(intern.supervisorId);
                       const isUnassigned = supervisorName === "Unassigned";
                       return (
@@ -315,11 +434,15 @@ function CorDash() {
                           <td className="px-6 py-4"><span className="bg-gray-100 text-gray-600 text-[10px] font-bold px-2 py-1 rounded-lg border border-gray-200">{getCollegeName(intern.departmentId)}</span></td>
                           <td className="px-6 py-4 text-sidebar-muted font-medium">{intern.course || 'N/A'}</td>
                           <td className={`px-6 py-4 font-bold ${isUnassigned ? 'text-red-400' : 'text-brand-dark'}`}>{supervisorName}</td>
-                          <td className="px-6 py-4"><span className="bg-status-mint-bg text-status-mint-text text-xs font-bold px-2.5 py-1 rounded-lg">Active</span></td>
+                          <td className="px-6 py-4">
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${intern.ojtStatus === 'Completed' ? 'bg-status-mint-bg text-status-mint-text' : 'bg-[#E0F2FE] text-[#0284C7]'}`}>
+                                  {intern.ojtStatus}
+                              </span>
+                          </td>
                         </tr>
                       );
                     })}
-                     {displayedInterns.length === 0 && <tr><td colSpan="5" className="p-8 text-center text-sidebar-muted font-medium">No interns found matching filters.</td></tr>}
+                     {sortedDisplayedInterns.length === 0 && <tr><td colSpan="5" className="p-8 text-center text-sidebar-muted font-medium">No interns found matching filters.</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -419,6 +542,39 @@ function CorDash() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- VIEW INTERNS MODAL --- */}
+      {viewInternsModalOpen && (
+        <div className="fixed inset-0 bg-[#002B66]/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-[0_20px_60px_rgba(66,165,255,0.16)] overflow-hidden animate-fadeIn flex flex-col max-h-[80vh]">
+            <div className="px-6 py-5 border-b border-sidebar-border flex justify-between items-center bg-sidebar-bg shrink-0">
+              <div>
+                <h3 className="text-lg font-bold text-sidebar-text">Assigned Interns</h3>
+                <p className="text-xs text-sidebar-muted font-medium mt-0.5">Supervisor: {selectedSupervisor?.name}</p>
+              </div>
+              <button onClick={() => setViewInternsModalOpen(false)} className="text-sidebar-muted hover:text-sidebar-text bg-white p-1 rounded-xl shadow-sm border border-sidebar-border transition-colors">
+                <XIcon className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-0 overflow-y-auto custom-scrollbar">
+              <ul className="divide-y divide-sidebar-border/50">
+                 {selectedSupInterns.map((intern, idx) => (
+                    <li key={intern.id || idx} className="px-6 py-4 hover:bg-sidebar-bg/50 transition-colors flex justify-between items-center">
+                       <div>
+                         <p className="font-bold text-sidebar-text text-sm">{intern.name || `${intern.firstName} ${intern.lastName}`}</p>
+                         <p className="text-[10px] text-sidebar-muted font-medium mt-0.5">{intern.course || getCollegeName(intern.departmentId)}</p>
+                       </div>
+                       <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider ${intern.ojtStatus === 'Completed' ? 'bg-[#D1FAE5] text-[#059669]' : 'bg-[#E0F2FE] text-[#0284C7]'}`}>
+                         {intern.ojtStatus}
+                       </span>
+                    </li>
+                 ))}
+              </ul>
+            </div>
           </div>
         </div>
       )}

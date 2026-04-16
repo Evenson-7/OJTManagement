@@ -63,7 +63,30 @@ const badgeDefinitions = [
     { id: "academic_excellence", name: "Academic Excellence", description: "Scored 4.5+ in Academic/Teaching Competence.", icon: <BsGraphUpArrow />, color: "from-yellow-400 to-amber-500", criteria: (evals) => evals.some(e => e.sectionScores && Object.entries(e.sectionScores).some(([key, val]) => key.toLowerCase().includes('academic') || key.toLowerCase().includes('competence') ? val >= 4.5 : false)) }
 ];
 
-const analyzeSections = (evalList) => { const sectionAggregates = {}; evalList.forEach(ev => { if (ev.sectionScores) { Object.entries(ev.sectionScores).forEach(([title, score]) => { const cleanTitle = title.trim(); if (!sectionAggregates[cleanTitle]) sectionAggregates[cleanTitle] = { sum: 0, count: 0 }; sectionAggregates[cleanTitle].sum += score; sectionAggregates[cleanTitle].count += 1; }); } }); const sectionAverages = Object.entries(sectionAggregates).map(([title, data]) => ({ section: title, score: Number((data.sum / data.count).toFixed(2)) })); const strengths = [...sectionAverages].filter(s => s.score >= 3.5).sort((a,b) => b.score - a.score).slice(0, 3); const improvementAreas = [...sectionAverages].filter(s => s.score < 4.0).sort((a,b) => a.score - b.score).slice(0, 3); return { strengths, improvementAreas }; };
+// FIX: Mathematical overlap corrected in analyzeSections
+const analyzeSections = (evalList) => { 
+    const sectionAggregates = {}; 
+    evalList.forEach(ev => { 
+        if (ev.sectionScores) { 
+            Object.entries(ev.sectionScores).forEach(([title, score]) => { 
+                const cleanTitle = title.trim(); 
+                if (!sectionAggregates[cleanTitle]) sectionAggregates[cleanTitle] = { sum: 0, count: 0 }; 
+                sectionAggregates[cleanTitle].sum += score; 
+                sectionAggregates[cleanTitle].count += 1; 
+            }); 
+        } 
+    }); 
+    const sectionAverages = Object.entries(sectionAggregates).map(([title, data]) => ({ 
+        section: title, 
+        score: Number((data.sum / data.count).toFixed(2)) 
+    })); 
+    
+    // Strengths are strictly >= 4.0. Weaknesses are strictly <= 3.5.
+    const strengths = [...sectionAverages].filter(s => s.score >= 4.0).sort((a,b) => b.score - a.score).slice(0, 3); 
+    const improvementAreas = [...sectionAverages].filter(s => s.score <= 3.5).sort((a,b) => a.score - b.score).slice(0, 3); 
+    
+    return { strengths, improvementAreas }; 
+};
 
 const calculateAnalytics = (allEvaluations, allInternsList) => { 
   const submitted = allEvaluations.filter(e => e.status === "submitted" || e.status === "completed"); 
@@ -209,38 +232,28 @@ const EvaluationTab = ({ user }) => {
   const [internRankings, setInternRankings] = useState([]); 
   const [myBadges, setMyBadges] = useState([]);
 
-// 1. STRICT DEPARTMENT FILTERING (Expanded Keywords)
   useEffect(() => {
-    // DEBUG: Look in your browser console to see exactly what string is causing the issue
-    console.log("Current User Role:", user?.role, "| Department ID:", user?.departmentId);
-
     if (user && user.departmentId) {
-       // Force to string, uppercase, and remove spaces to catch weird DB formatting
        const dept = String(user.departmentId).toUpperCase().replace(/\s+/g, '');
        
-       // Massively expanded keyword dictionary to catch specific Philippine degree acronyms
        const isCTE = dept.includes('CTE') || dept.includes('EDUC') || dept.includes('TEACH') || dept.includes('BSED') || dept.includes('BEED');
        const isCBE = dept.includes('CBE') || dept.includes('BUSI') || dept.includes('ACCT') || dept.includes('ACCOUNT') || dept.includes('COMMERCE') || dept.includes('MANAGEMENT') || dept.includes('BSBA') || dept.includes('BSA');
        const isCCS = dept.includes('CCS') || dept.includes('COMP') || dept.includes('INFO') || dept.includes('IT') || dept.includes('CS') || dept.includes('BSIT') || dept.includes('BSCS');
 
        const restrictedTemplates = EVALUATION_TEMPLATES.filter(t => {
           const templateString = `${t.id} ${t.title}`.toUpperCase();
-          
           if (isCTE && templateString.includes('CTE')) return true;
           if (isCBE && templateString.includes('CBE')) return true;
           if (isCCS && (templateString.includes('CCS') || t.id.includes('site_supervisor'))) return true;
-          
           return false;
        });
 
-       // Strictly apply the filtered list. If it misses completely, it falls back to all.
        setDefaultTemplates(restrictedTemplates.length > 0 ? restrictedTemplates : EVALUATION_TEMPLATES);
     } else {
        setDefaultTemplates(EVALUATION_TEMPLATES);
     }
   }, [user]);
 
-  // 2. AUTO-SELECT THE CORRECT TEMPLATE IN DROPDOWN
   useEffect(() => {
       if (combinedTemplates.length > 0) {
           const isCurrentValid = combinedTemplates.some(t => t.id === sendForm.templateId);
@@ -358,9 +371,8 @@ const EvaluationTab = ({ user }) => {
     } catch (e) { console.error(e); toast.error("Failed to save template to database."); }
   };
 
- const handleOpenBuilder = () => { 
-      // Auto-detect the correct grading format based on expanded keywords
-      let defaultFormat = "CTE_5_POINT"; // Fallback
+  const handleOpenBuilder = () => { 
+      let defaultFormat = "CTE_5_POINT"; 
       if (user?.departmentId) {
           const dept = String(user.departmentId).toUpperCase().replace(/\s+/g, '');
           
@@ -542,12 +554,10 @@ const EvaluationTab = ({ user }) => {
   };
 
 const handleEditEvaluation = (ev) => {
-    // STRICT RBAC: Only the explicitly assigned supervisor can edit a pending/draft evaluation.
     const isAssignedSupervisor = user.role === 'supervisor' && ev.supervisorId === user.uid;
     const isEditableStatus = ev.status === 'draft' || ev.status === 'pending_supervisor';
 
     if (!isAssignedSupervisor || !isEditableStatus) {
-        // Force view-only mode for Coordinators, Interns, or if it's already submitted.
         return handleViewEvaluation(ev);
     }
 

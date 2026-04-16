@@ -25,7 +25,6 @@ const getLocalDateString = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-// --- STRICT FORMATTER: Always returns "Xh Ym" format ---
 const formatToHoursMinutes = (decimalHours) => {
     const num = parseFloat(decimalHours);
     if (isNaN(num)) return "--";
@@ -65,6 +64,7 @@ const printWebDTR = (internName, startDate, endDate, logs, supervisorName) => {
                     td { border: 1px solid #000; padding: 0 5px; text-align: center; vertical-align: middle; height: 26px; white-space: nowrap; overflow: hidden; }
                     .weekend { background-color: #f9fafb; color: #9ca3af; font-style: italic; }
                     .absent { color: #dc2626; background-color: #fee2e2; font-weight: bold; }
+                    .special-event { background-color: #f3e8ff; color: #6b21a8; font-weight: bold; }
                     .time-text { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; }
                     .footer { margin-top: 30px; display: flex; justify-content: space-between; font-size: 11px; page-break-inside: avoid; }
                     .sign-box { text-align: center; width: 40%; }
@@ -99,14 +99,17 @@ const printWebDTR = (internName, startDate, endDate, logs, supervisorName) => {
                             const dayName = dateObj.toLocaleDateString("en-US", { weekday: "long" });
                             const isWeekend = log.status === "Weekend";
                             const isAbsent = log.status === "Absent";
+                            const isSpecialEvent = ["SUSPENDED", "LAC Session", "Holiday"].includes(log.status);
                             
                             let timeDisplay = "";
                             if (log.morningIn || log.morningOut) timeDisplay += `AM:${log.morningIn||'--'}-${log.morningOut||'--'} `;
                             if (log.afternoonIn || log.afternoonOut) timeDisplay += `PM:${log.afternoonIn||'--'}-${log.afternoonOut||'--'}`;
                             if (!timeDisplay && (log.timeIn || log.timeOut)) timeDisplay = `${log.timeIn||'--'} - ${log.timeOut||'--'}`;
+                            
+                            if (isSpecialEvent) timeDisplay = "---";
                             if (!timeDisplay && !isWeekend && !isAbsent) timeDisplay = "";
 
-                            const rowClass = isWeekend ? "weekend" : isAbsent ? "absent" : "";
+                            const rowClass = isWeekend ? "weekend" : isAbsent ? "absent" : isSpecialEvent ? "special-event" : "";
                             const formattedTime = log.hoursWorked > 0 ? formatToHoursMinutes(log.hoursWorked) : "";
 
                             return `
@@ -197,7 +200,6 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
     printWebDTR(iName, startDate, endDate, logs, tracedSupervisorName);
   };
 
-  // --- PDF EXPORT FIX: Added setTimeOut to allow DOM paint before canvas capture ---
   const handleExportPDF = () => {
     const element = document.createElement("div");
     
@@ -231,15 +233,19 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
                   const d = new Date(log.date);
                   const isWeekend = log.status === "Weekend";
                   const isAbsent = log.status === "Absent";
+                  const isSpecialEvent = ["SUSPENDED", "LAC Session", "Holiday"].includes(log.status);
+                  
                   let time = "";
                   
                   if (log.morningIn || log.morningOut) time += `AM:${log.morningIn||'--'}-${log.morningOut||'--'} `;
                   if (log.afternoonIn || log.afternoonOut) time += `PM:${log.afternoonIn||'--'}-${log.afternoonOut||'--'}`;
                   if (!time && (log.timeIn || log.timeOut)) time = `${log.timeIn||'--'} - ${log.timeOut||'--'}`;
                   
-                  const bg = isWeekend ? "#f9fafb" : isAbsent ? "#fee2e2" : "transparent";
-                  const color = isWeekend ? "#9ca3af" : isAbsent ? "#dc2626" : "black";
-                  const weight = isAbsent ? "bold" : "normal";
+                  if (isSpecialEvent) time = "---";
+
+                  const bg = isWeekend ? "#f9fafb" : isAbsent ? "#fee2e2" : isSpecialEvent ? "#f3e8ff" : "transparent";
+                  const color = isWeekend ? "#9ca3af" : isAbsent ? "#dc2626" : isSpecialEvent ? "#6b21a8" : "black";
+                  const weight = (isAbsent || isSpecialEvent) ? "bold" : "normal";
                   const style = isWeekend ? "italic" : "normal";
                   const formattedTime = log.hoursWorked > 0 ? formatToHoursMinutes(log.hoursWorked) : '';
 
@@ -270,7 +276,6 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
       </div>
     `;
     
-    // Safely position out of viewport so html2canvas can still capture it
     element.style.position = "absolute";
     element.style.top = "200vh";
     element.style.left = "0";
@@ -278,7 +283,6 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
 
     toast.loading("Generating PDF...", { id: "dtr_pdf" });
 
-    // Give browser 150ms to paint the DOM element before capturing
     setTimeout(() => {
         html2canvas(element, { scale: 2, useCORS: true }).then((canvas) => {
             document.body.removeChild(element);
@@ -427,17 +431,23 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
                     const dateObj = new Date(log.date);
                     const isWeekend = log.status === "Weekend";
                     const isAbsent = log.status === "Absent";
+                    const isSpecialEvent = ["SUSPENDED", "LAC Session", "Holiday"].includes(log.status);
                     
                     const hasMorning = log.morningIn || log.morningOut;
                     const hasAfternoon = log.afternoonIn || log.afternoonOut;
                     const hasGeneric = log.timeIn || log.timeOut;
 
+                    let badgeClass = "bg-gray-100 text-gray-500";
+                    if (log.status === "Present") badgeClass = "bg-green-100 text-green-700";
+                    else if (isAbsent) badgeClass = "bg-red-100 text-red-700";
+                    else if (isSpecialEvent) badgeClass = "bg-purple-100 text-purple-700";
+
                     return (
-                    <tr key={index} className={`hover:bg-gray-50 transition-colors ${isWeekend ? "bg-gray-50/50" : isAbsent ? "bg-red-50/30" : ""}`}>
+                    <tr key={index} className={`hover:bg-gray-50 transition-colors ${isWeekend ? "bg-gray-50/50" : isAbsent ? "bg-red-50/30" : isSpecialEvent ? "bg-purple-50/30" : ""}`}>
                         <td className="px-6 py-4 font-bold text-gray-900">{dateObj.getDate()}</td>
                         <td className="px-6 py-4 text-gray-500">{dateObj.toLocaleDateString("en-US", { weekday: "long" })}</td>
                         <td className="px-6 py-4">
-                            {(isWeekend || isAbsent || log.status === "--") ? (
+                            {(isWeekend || isAbsent || isSpecialEvent || log.status === "--") ? (
                                 <span className="text-gray-300 text-xs italic">--</span>
                             ) : (
                                 <div className="flex flex-col gap-1">
@@ -449,9 +459,13 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
                             )}
                         </td>
                         <td className="px-6 py-4 text-center font-mono font-bold text-[#0094FF]">
-                            {log.hoursWorked > 0 ? formatToHoursMinutes(log.hoursWorked) : "-"}
+                            {log.hoursWorked > 0 && !isSpecialEvent ? formatToHoursMinutes(log.hoursWorked) : "-"}
                         </td>
-                        <td className="px-6 py-4 text-right"><span className={`px-2.5 py-1 rounded-full text-[10px] uppercase font-bold tracking-wider ${log.status === "Present" ? "bg-green-100 text-green-700" : log.status === "Absent" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-500"}`}>{log.status}</span></td>
+                        <td className="px-6 py-4 text-right">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] uppercase font-bold tracking-wider ${badgeClass}`}>
+                                {log.status}
+                            </span>
+                        </td>
                     </tr>
                     );
                 })}

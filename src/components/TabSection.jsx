@@ -1,6 +1,6 @@
 // fileName: TabSection.jsx
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { 
   HiOutlineChartPie, HiOutlineTrophy, HiOutlineChartBar, 
@@ -13,7 +13,8 @@ import {
 } from "react-icons/hi2";
 import { FaStar, FaMedal, FaCrown } from "react-icons/fa";
 
-import { doc, deleteDoc } from "firebase/firestore";
+// FIX 1: Added collection, query, where, getDocs for the attendance check
+import { doc, deleteDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../../firebaseConfig"; 
 
 import EvaluationForm from "./EvalFormat"; 
@@ -51,6 +52,32 @@ const InternRosterSection = ({ data, handlers, user }) => {
     const [selectedCourse, setSelectedCourse] = useState("All"); 
     const isCoordinator = user.role === 'coordinator';
 
+    // FIX 2: State to securely hold calculated OJT hours
+    const [internHoursMap, setInternHoursMap] = useState({});
+
+    // FIX 3: Fetch total hours exactly like InternOver.jsx to enforce Certificate lock
+    useEffect(() => {
+        const fetchHours = async () => {
+            const newMap = {};
+            try {
+                await Promise.all(data.myInterns.map(async (intern) => {
+                    const attQuery = query(collection(db, "attendance"), where("internId", "==", intern.uid));
+                    const attDocs = await getDocs(attQuery);
+                    let total = 0;
+                    attDocs.forEach(d => {
+                        const hw = d.data().hoursWorked;
+                        if (hw) total += parseFloat(hw);
+                    });
+                    newMap[intern.uid] = total;
+                }));
+                setInternHoursMap(newMap);
+            } catch (error) {
+                console.error("Error fetching hours", error);
+            }
+        };
+        if (data.myInterns?.length > 0) fetchHours();
+    }, [data.myInterns]);
+
     const openCalculator = (internId) => {
         const internEvals = data.allEvaluations.filter(e => e.internId === internId && (e.status === 'submitted' || e.status === 'completed'));
         if (internEvals.length === 0) return toast.error("No evaluations to compute yet.");
@@ -79,6 +106,18 @@ const InternRosterSection = ({ data, handlers, user }) => {
         if (selectedCourse === "All") return true;
         const internCourse = i.course || i.program || "Unknown";
         return internCourse === selectedCourse;
+    });
+
+    const sortedFilteredInterns = [...filteredInterns].sort((a, b) => {
+        const rawNameA = a.name || `${a.firstName || ''} ${a.lastName || ''}`.trim();
+        const partsA = rawNameA.split(' ');
+        const lastA = a.lastName || (partsA.length > 1 ? partsA[partsA.length - 1] : rawNameA);
+
+        const rawNameB = b.name || `${b.firstName || ''} ${b.lastName || ''}`.trim();
+        const partsB = rawNameB.split(' ');
+        const lastB = b.lastName || (partsB.length > 1 ? partsB[partsB.length - 1] : rawNameB);
+
+        return lastA.toLowerCase().localeCompare(lastB.toLowerCase());
     });
 
     const ComputeModalCard = ({ internEvals, internUid }) => (
@@ -117,14 +156,18 @@ const InternRosterSection = ({ data, handlers, user }) => {
                 )}
             </div>
 
-            {/* Mobile Card View */}
             <div className="block md:hidden p-4 space-y-4">
-                {filteredInterns.map((intern) => {
+                {sortedFilteredInterns.map((intern) => {
                     const internEvals = data.allEvaluations.filter(e => e.internId === intern.uid && (e.status === 'submitted' || e.status === 'completed'));
                     const isComputing = activeComputeModal === intern.uid;
                     const assignedSup = data.supervisors?.find(s => s.uid === intern.supervisorId);
                     const isFinished = intern.internshipStatus === "Finished";
                     const latestEval = [...internEvals].sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0];
+
+                    // FIX 4: Safety Check Variables for Mobile View
+                    const reqHours = intern.requiredHours || 486;
+                    const compHours = internHoursMap[intern.uid] || 0;
+                    const isOjtCompleted = compHours >= reqHours;
 
                     return (
                         <div key={intern.uid} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm flex flex-col">
@@ -145,11 +188,22 @@ const InternRosterSection = ({ data, handlers, user }) => {
                                 {isCoordinator && (
                                     <select 
                                         value={intern.internshipStatus || "Active"} 
-                                        onChange={(e) => handlers.handleChangeInternStatus(intern.uid, e.target.value)} 
+                                        onChange={(e) => {
+                                            // FIX 5: Prevent dropdown bypass
+                                            if (e.target.value === "Finished" && !isOjtCompleted) {
+                                                toast.error(`Cannot finish. Intern has only logged ${compHours.toFixed(2)} of ${reqHours} hours.`);
+                                                return;
+                                            }
+                                            handlers.handleChangeInternStatus(intern.uid, e.target.value);
+                                        }}
                                         className={`w-full text-sm font-bold px-3 py-2 rounded outline-none cursor-pointer transition-colors shadow-sm border ${intern.internshipStatus === "Finished" ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-700 border-gray-200"}`}
                                     >
                                         <option value="Active">Active (In Progress)</option>
-                                        {internEvals.length > 0 && <option value="Finished">Finished (Ready for Cert)</option>}
+                                        {internEvals.length > 0 && (
+                                            <option value="Finished" disabled={!isOjtCompleted}>
+                                                Finished (Ready for Cert) {!isOjtCompleted ? `(Missing Hours)` : ''}
+                                            </option>
+                                        )}
                                     </select>
                                 )}
 
@@ -175,10 +229,9 @@ const InternRosterSection = ({ data, handlers, user }) => {
                         </div>
                     );
                 })}
-                {filteredInterns.length === 0 && <div className="text-center py-8 text-gray-500 italic border border-dashed rounded-lg">No interns found.</div>}
+                {sortedFilteredInterns.length === 0 && <div className="text-center py-8 text-gray-500 italic border border-dashed rounded-lg">No interns found.</div>}
             </div>
 
-            {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
                 <table className="w-full">
                     <thead className="bg-gray-50">
@@ -192,12 +245,17 @@ const InternRosterSection = ({ data, handlers, user }) => {
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {filteredInterns.map((intern) => {
+                        {sortedFilteredInterns.map((intern) => {
                             const internEvals = data.allEvaluations.filter(e => e.internId === intern.uid && (e.status === 'submitted' || e.status === 'completed'));
                             const isComputing = activeComputeModal === intern.uid;
                             const assignedSup = data.supervisors?.find(s => s.uid === intern.supervisorId);
                             const isFinished = intern.internshipStatus === "Finished";
                             const latestEval = [...internEvals].sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0];
+
+                            // FIX 6: Safety Check Variables for Desktop Table View
+                            const reqHours = intern.requiredHours || 486;
+                            const compHours = internHoursMap[intern.uid] || 0;
+                            const isOjtCompleted = compHours >= reqHours;
 
                             return (
                                 <React.Fragment key={intern.uid}>
@@ -224,11 +282,22 @@ const InternRosterSection = ({ data, handlers, user }) => {
                                             <td className="px-6 py-4">
                                                 <select 
                                                     value={intern.internshipStatus || "Active"} 
-                                                    onChange={(e) => handlers.handleChangeInternStatus(intern.uid, e.target.value)} 
+                                                    onChange={(e) => {
+                                                        if (e.target.value === "Finished" && !isOjtCompleted) {
+                                                            toast.error(`Cannot finish. Intern has only logged ${compHours.toFixed(2)} of ${reqHours} hours.`);
+                                                            return;
+                                                        }
+                                                        handlers.handleChangeInternStatus(intern.uid, e.target.value);
+                                                    }}
                                                     className={`text-xs font-bold px-3 py-1.5 rounded outline-none cursor-pointer transition-colors shadow-sm border ${intern.internshipStatus === "Finished" ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-white"}`}
                                                 >
                                                     <option value="Active">Active (In Progress)</option>
-                                                    {internEvals.length > 0 && <option value="Finished">Finished (Ready for Cert)</option>}
+                                                    {internEvals.length > 0 && (
+                                                        // FIX 7: Disable option physically and visually explain why
+                                                        <option value="Finished" disabled={!isOjtCompleted}>
+                                                            Finished (Ready for Cert) {!isOjtCompleted ? `(Missing Hours)` : ''}
+                                                        </option>
+                                                    )}
                                                 </select>
                                             </td>
                                         )}
@@ -273,7 +342,7 @@ const InternRosterSection = ({ data, handlers, user }) => {
                                 </React.Fragment>
                             );
                         })}
-                        {filteredInterns.length === 0 && (
+                        {sortedFilteredInterns.length === 0 && (
                             <tr>
                                 <td colSpan="6" className="text-center py-8 text-gray-500 italic">No interns found for the selected course/program.</td>
                             </tr>
@@ -540,6 +609,32 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
   
     return (
       <div className="space-y-6">
+         <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+            <h4 className="text-sm font-bold text-[#002B66] mb-3 uppercase tracking-wide border-b pb-2">Performance Dashboard Legend</h4>
+            
+            <div className="flex flex-col md:flex-row gap-6 md:gap-12">
+                <div className="flex-1">
+                    <p className="text-xs font-bold text-gray-400 mb-2 uppercase">Letter Ratings</p>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-2 gap-x-4 text-xs font-bold text-gray-600">
+                       <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-green-500 shadow-sm"></span> 4.5 - 5.0 (E) Excellent</div>
+                       <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-blue-500 shadow-sm"></span> 4.0 - 4.49 (A) Above Std.</div>
+                       <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-yellow-500 shadow-sm"></span> 3.0 - 3.99 (S) Standard</div>
+                       <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-orange-500 shadow-sm"></span> 2.0 - 2.99 (N) Needs Imp.</div>
+                       <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-red-500 shadow-sm"></span> Below 2.0 (P) Poor</div>
+                    </div>
+                </div>
+
+                <div className="md:w-1/3 md:border-l md:pl-6">
+                    <p className="text-xs font-bold text-gray-400 mb-2 uppercase">Stability Trends</p>
+                    <div className="flex flex-col gap-2 text-xs font-bold text-gray-600">
+                       <div className="flex items-center gap-2"><HiArrowTrendingUp className="text-green-500 w-4 h-4"/> Improving (Latest &gt; Average)</div>
+                       <div className="flex items-center gap-2"><HiArrowTrendingDown className="text-red-500 w-4 h-4"/> Declining (Latest &lt; Average)</div>
+                       <div className="flex items-center gap-2"><span className="text-gray-400 w-4 h-4 text-center text-lg leading-none">-</span> Stable (Consistent scores)</div>
+                    </div>
+                </div>
+            </div>
+         </div>
+
          {isStaff && (
            <div className="bg-white p-4 rounded-lg border border-gray-200 flex items-center gap-4 shadow-sm">
               <HiOutlineMagnifyingGlass className="text-[#0094FF] w-5 h-5 shrink-0" />
@@ -638,19 +733,33 @@ const PerformanceSection = ({ performanceData, internRankings, user }) => {
                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm relative overflow-hidden group">
                        <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><HiOutlineChartPie className="w-24 h-24"/></div>
-                       <p className="text-sm font-bold text-gray-500 uppercase">Average Score</p>
+                       <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Cumulative Average</p>
+                       <p className="text-[9px] text-gray-400 font-medium leading-none mt-1">All forms combined</p>
                        <div className="flex items-baseline gap-2 mt-2"><p className="text-3xl md:text-4xl font-black text-[#0094FF]">{avgScore?.toFixed(2)}</p><span className="text-base md:text-xl font-bold text-gray-400">({getLetterMetric(avgScore || 0)})</span></div>
                     </div>
                     <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
-                       <p className="text-sm font-bold text-gray-500 uppercase" title="Comparing this against the average shows if they are improving.">Latest Rating</p>
-                       <div className="flex items-baseline gap-2 mt-2"><p className={`text-3xl md:text-4xl font-black ${latest >= 4 ? 'text-green-600' : 'text-indigo-600'}`}>{latest?.toFixed(2) || "0.00"}</p><span className="text-base md:text-xl font-bold text-gray-400">({getLetterMetric(latest || 0)})</span></div>
+                       <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Most Recent Eval</p>
+                       <p className="text-[9px] text-gray-400 font-medium leading-none mt-1">Latest submission only</p>
+                       <div className="flex items-baseline gap-2 mt-2">
+                           {latest !== null ? (
+                               <>
+                                <p className={`text-3xl md:text-4xl font-black ${latest >= 4 ? 'text-green-600' : 'text-indigo-600'}`}>{latest?.toFixed(2)}</p>
+                                <span className="text-base md:text-xl font-bold text-gray-400">({getLetterMetric(latest)})</span>
+                               </>
+                           ) : (
+                               <p className="text-3xl font-black text-gray-300">N/A</p>
+                           )}
+                        </div>
                     </div>
                     <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
-                       <p className="text-sm font-bold text-gray-500 uppercase">Evaluations</p><p className="text-3xl md:text-4xl font-black text-gray-800 mt-2">{targetData.evaluationsCompleted || 0}</p>
+                       <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Evaluations</p>
+                       <p className="text-[9px] text-gray-400 font-medium leading-none mt-1">Total completed</p>
+                       <p className="text-3xl md:text-4xl font-black text-gray-800 mt-2">{targetData.evaluationsCompleted || 0}</p>
                     </div>
                     <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
-                       <p className="text-sm font-bold text-gray-500 uppercase">Stability Trend</p>
-                       <div className="flex items-center gap-2 mt-2"><span className={`text-xl md:text-2xl font-black ${trend === 'Improving' ? 'text-green-500' : trend === 'Declining' ? 'text-red-500' : 'text-gray-400'}`}>{trend || (trendValue > 0 ? "Up" : "Stable")}</span>{trend === 'Improving' ? <HiArrowTrendingUp className="w-6 h-6 text-green-500"/> : <HiArrowTrendingDown className="w-6 h-6 text-red-500"/>}</div>
+                       <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Performance Trend</p>
+                       <p className="text-[9px] text-gray-400 font-medium leading-none mt-1">Latest vs. Average</p>
+                       <div className="flex items-center gap-2 mt-2"><span className={`text-xl md:text-2xl font-black ${trend === 'Improving' ? 'text-green-500' : trend === 'Declining' ? 'text-red-500' : 'text-gray-400'}`}>{trend || (trendValue > 0 ? "Up" : "Stable")}</span>{trend === 'Improving' ? <HiArrowTrendingUp className="w-6 h-6 text-green-500"/> : trend === 'Declining' ? <HiArrowTrendingDown className="w-6 h-6 text-red-500"/> : null}</div>
                     </div>
                  </div>
                  
@@ -864,23 +973,30 @@ const DashboardView = ({ data, handlers, user }) => {
                                             </div>
                                         </div>
                                     </div>
-<div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto shrink-0">
-    {isCertificateBearer && !isSupervisor && ev.certificateIssued && (
-        <button onClick={() => handlers.handleViewCertificate(ev)} className="w-full sm:w-auto px-4 py-2 text-sm bg-[#0094FF] text-white rounded-lg font-bold hover:bg-[#002B66] transition-colors shadow-sm flex justify-center items-center gap-2"><FaMedal /> View Cert</button>
-    )}
-    <button 
-        onClick={() => {
-            const isAssignedSup = user.uid === ev.supervisorId;
-            const isEditable = isAssignedSup && (ev.status === 'draft' || ev.status === 'pending_supervisor');
-            isEditable ? handlers.handleEditEvaluation(ev) : handlers.handleViewEvaluation(ev);
-        }} 
-        className="w-full sm:w-auto px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-[#0094FF] hover:border-[#0094FF] font-medium transition-colors text-center"
-    >
-        {(user.uid === ev.supervisorId && (ev.status === 'draft' || ev.status === 'pending_supervisor')) 
-            ? 'Open Assignment' 
-            : 'View Details'}
-    </button>
-</div>
+                                    <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto shrink-0">
+                                        {isCertificateBearer && !isSupervisor && ev.certificateIssued && (
+                                            <button onClick={() => handlers.handleViewCertificate(ev)} className="w-full sm:w-auto px-4 py-2 text-sm bg-[#0094FF] text-white rounded-lg font-bold hover:bg-[#002B66] transition-colors shadow-sm flex justify-center items-center gap-2"><FaMedal /> View Cert</button>
+                                        )}
+                                        
+                                        {(ev.status === 'submitted' || ev.status === 'completed' || user.uid === ev.supervisorId) ? (
+                                            <button 
+                                                onClick={() => {
+                                                    const isAssignedSup = user.uid === ev.supervisorId;
+                                                    const isEditable = isAssignedSup && (ev.status === 'draft' || ev.status === 'pending_supervisor');
+                                                    isEditable ? handlers.handleEditEvaluation(ev) : handlers.handleViewEvaluation(ev);
+                                                }} 
+                                                className="w-full sm:w-auto px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-[#0094FF] hover:border-[#0094FF] font-medium transition-colors text-center"
+                                            >
+                                                {(user.uid === ev.supervisorId && (ev.status === 'draft' || ev.status === 'pending_supervisor')) 
+                                                    ? 'Open Assignment' 
+                                                    : 'View Details'}
+                                            </button>
+                                        ) : (
+                                            <span className="w-full sm:w-auto px-4 py-2 text-sm text-gray-400 font-medium italic text-center bg-gray-50 rounded-lg border border-gray-100">
+                                                Supervisor drafting...
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             );
                         })}

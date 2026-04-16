@@ -40,6 +40,7 @@ function InternOver({ user, onShowLogs }) {
   const [loading, setLoading] = useState(true);
   const [internDataList, setInternDataList] = useState([]);
   const [isListExpanded, setIsListExpanded] = useState(false);
+  const [sortBy, setSortBy] = useState('lastName'); 
 
   useEffect(() => {
     let isMounted = true;
@@ -80,13 +81,25 @@ function InternOver({ user, onShowLogs }) {
               if (hw) actualTotal += parseFloat(hw); 
             });
 
+            const rawName = data.name || `${data.firstName || ''} ${data.lastName || ''}`.trim();
+            const nameParts = rawName.split(' ');
+            const extractedLastName = data.lastName || (nameParts.length > 1 ? nameParts[nameParts.length - 1] : rawName);
+            
+            const reqHours = data.requiredHours || 486;
+            const progressPercent = reqHours > 0 ? (actualTotal / reqHours) : 0;
+            
+            const ojtStatus = actualTotal >= reqHours ? 'Completed' : 'Ongoing';
+
             return {
               id: internId,
-              name: data.name || `${data.firstName || ''} ${data.lastName || ''}`.trim(),
+              name: rawName,
+              lastNameForSort: extractedLastName.toLowerCase(), 
               course: data.course || data.internshipDepartment || 'Intern',
-              requiredHours: data.requiredHours || 486,
+              requiredHours: reqHours,
               todayStatus,
-              completedHours: actualTotal
+              completedHours: actualTotal,
+              progressPercent: progressPercent,
+              ojtStatus: ojtStatus 
             };
           });
           
@@ -103,23 +116,48 @@ function InternOver({ user, onShowLogs }) {
     return () => { isMounted = false; };
   }, [user]);
 
-  if (loading) return <div className="flex items-center justify-center h-40"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0094FF]"></div></div>;
+  const sortedInterns = [...internDataList].sort((a, b) => {
+    if (sortBy === 'lastName') {
+      return a.lastNameForSort.localeCompare(b.lastNameForSort);
+    } else if (sortBy === 'progress') {
+      return b.progressPercent - a.progressPercent; 
+    }
+    return 0; 
+  });
 
-  const visibleInterns = isListExpanded ? internDataList : internDataList.slice(0, 4);
+  const visibleInterns = isListExpanded ? sortedInterns : sortedInterns.slice(0, 4);
+
+  if (loading) return <div className="flex items-center justify-center h-40"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0094FF]"></div></div>;
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-      <div className="p-5 border-b border-gray-200 flex justify-between items-center bg-gray-50/50">
+      <div className="p-5 border-b border-gray-200 flex justify-between items-center bg-gray-50/50 flex-wrap gap-4">
         <div>
           <h2 className="text-lg font-bold text-[#002B66]">Intern Overview</h2>
           <p className="text-sm text-gray-500 mt-0.5">Track daily attendance and hours progression.</p>
         </div>
-        {/* CHANGED TO USE THE LOCAL TOGGLE INSTEAD OF TAB ROUTING */}
-        {onShowLogs && (
-          <button onClick={onShowLogs} className="px-4 py-2 bg-[#0094FF] text-white text-sm font-semibold rounded-lg hover:bg-[#002B66] transition-colors shadow-sm">
-            View Full Logs
-          </button>
-        )}
+        
+        <div className="flex items-center gap-3">
+          <div className="relative">
+             <select 
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="pl-3 pr-8 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#0094FF] appearance-none cursor-pointer shadow-sm"
+              >
+                <option value="lastName">Sort by Last Name (A-Z)</option>
+                <option value="progress">Sort by Progress (High to Low)</option>
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-500">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+          </div>
+
+          {onShowLogs && (
+            <button onClick={onShowLogs} className="px-4 py-2 bg-[#0094FF] text-white text-sm font-semibold rounded-lg hover:bg-[#002B66] transition-colors shadow-sm">
+              View Full Logs
+            </button>
+          )}
+        </div>
       </div>
       
       <div className="overflow-x-auto">
@@ -135,9 +173,9 @@ function InternOver({ user, onShowLogs }) {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {visibleInterns.map((intern) => {
-              const safeTotal = intern.requiredHours || 486;
-              const safeCompleted = intern.completedHours || 0;
-              const prog = safeTotal > 0 ? (safeCompleted / safeTotal) : 0;
+              const safeTotal = intern.requiredHours;
+              const safeCompleted = intern.completedHours;
+              const prog = intern.progressPercent;
               const stats = calculateCompletionDetails(Math.max(safeTotal - safeCompleted, 0));
               
               let statusColor = 'bg-gray-100 text-gray-600 border-gray-200'; let dotColor = 'bg-gray-400';
@@ -159,16 +197,30 @@ function InternOver({ user, onShowLogs }) {
                       <div className={`w-1.5 h-1.5 rounded-full ${dotColor} mr-2`} /><span className="text-[10px] font-bold uppercase tracking-wider">{intern.todayStatus}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 w-1/4">
+                  <td className="px-6 py-4 w-[28%]">
                     <div className="flex flex-col justify-center">
-                      <div className="flex justify-between text-[10px] font-semibold text-gray-500 mb-1"><span>{(prog * 100).toFixed(0)}%</span></div>
-                      <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden"><div className={`h-full rounded-full ${prog >= 1 ? 'bg-[#10b981]' : 'bg-[#42A5FF]'}`} style={{ width: `${Math.min(prog * 100, 100)}%` }} /></div>
-                      <div className="mt-1 text-[9px] text-gray-500 font-medium italic">{prog >= 1 ? <span className="text-[#10b981] font-bold">COMPLETED</span> : `${stats.daysLeft} days • End: ${stats.dateStr}`}</div>
+                      <div className="flex justify-between text-[11px] font-bold text-gray-600 mb-1.5">
+                         <span>{(prog * 100).toFixed(0)}% Completed</span>
+                      </div>
+                      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                         <div className={`h-full rounded-full ${prog >= 1 ? 'bg-[#10b981]' : 'bg-[#42A5FF]'}`} style={{ width: `${Math.min(prog * 100, 100)}%` }} />
+                      </div>
+                      
+                      {/* FIX: Changed to flex-col and added gap for readable column layout */}
+                      <div className="mt-2.5 flex flex-col items-start gap-1">
+                         <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider ${intern.ojtStatus === 'Completed' ? 'bg-[#D1FAE5] text-[#059669]' : 'bg-[#E0F2FE] text-[#0284C7]'}`}>
+                            {intern.ojtStatus}
+                         </span>
+                         <span className="text-[11px] text-gray-500 font-medium">
+                            {intern.ojtStatus === 'Completed' ? 'Ready for Certificate' : `${stats.daysLeft} days left • End: ${stats.dateStr}`}
+                         </span>
+                      </div>
+                      
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
                      <div className="text-sm font-bold text-gray-900">{formatDecimalHours(safeCompleted)}</div>
-                     <div className="text-[10px] text-gray-500 font-medium">of {formatDecimalHours(safeTotal)}</div>
+                     <div className="text-[10px] text-gray-500 font-medium mt-0.5">of {formatDecimalHours(safeTotal)}</div>
                   </td>
                 </tr>
               );
