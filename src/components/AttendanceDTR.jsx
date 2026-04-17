@@ -65,6 +65,8 @@ const printWebDTR = (internName, startDate, endDate, logs, supervisorName) => {
                     .weekend { background-color: #f9fafb; color: #9ca3af; font-style: italic; }
                     .absent { color: #dc2626; background-color: #fee2e2; font-weight: bold; }
                     .special-event { background-color: #f3e8ff; color: #6b21a8; font-weight: bold; }
+                    .excused-event { background-color: #eff6ff; color: #1d4ed8; font-weight: bold; }
+                    .pending-appeal { background-color: #fff7ed; color: #c2410c; font-weight: bold; }
                     .time-text { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; }
                     .footer { margin-top: 30px; display: flex; justify-content: space-between; font-size: 11px; page-break-inside: avoid; }
                     .sign-box { text-align: center; width: 40%; }
@@ -100,16 +102,17 @@ const printWebDTR = (internName, startDate, endDate, logs, supervisorName) => {
                             const isWeekend = log.status === "Weekend";
                             const isAbsent = log.status === "Absent";
                             const isSpecialEvent = ["SUSPENDED", "LAC Session", "Holiday"].includes(log.status);
+                            const isExcused = ["Excused", "Pending Appeal"].includes(log.status);
                             
                             let timeDisplay = "";
                             if (log.morningIn || log.morningOut) timeDisplay += `AM:${log.morningIn||'--'}-${log.morningOut||'--'} `;
                             if (log.afternoonIn || log.afternoonOut) timeDisplay += `PM:${log.afternoonIn||'--'}-${log.afternoonOut||'--'}`;
                             if (!timeDisplay && (log.timeIn || log.timeOut)) timeDisplay = `${log.timeIn||'--'} - ${log.timeOut||'--'}`;
                             
-                            if (isSpecialEvent) timeDisplay = "---";
+                            if (isSpecialEvent || isExcused) timeDisplay = "---";
                             if (!timeDisplay && !isWeekend && !isAbsent) timeDisplay = "";
 
-                            const rowClass = isWeekend ? "weekend" : isAbsent ? "absent" : isSpecialEvent ? "special-event" : "";
+                            const rowClass = isWeekend ? "weekend" : isAbsent ? "absent" : isSpecialEvent ? "special-event" : log.status === "Excused" ? "excused-event" : log.status === "Pending Appeal" ? "pending-appeal" : "";
                             const formattedTime = log.hoursWorked > 0 ? formatToHoursMinutes(log.hoursWorked) : "";
 
                             return `
@@ -234,6 +237,7 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
                   const isWeekend = log.status === "Weekend";
                   const isAbsent = log.status === "Absent";
                   const isSpecialEvent = ["SUSPENDED", "LAC Session", "Holiday"].includes(log.status);
+                  const isExcused = ["Excused", "Pending Appeal"].includes(log.status);
                   
                   let time = "";
                   
@@ -241,11 +245,11 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
                   if (log.afternoonIn || log.afternoonOut) time += `PM:${log.afternoonIn||'--'}-${log.afternoonOut||'--'}`;
                   if (!time && (log.timeIn || log.timeOut)) time = `${log.timeIn||'--'} - ${log.timeOut||'--'}`;
                   
-                  if (isSpecialEvent) time = "---";
+                  if (isSpecialEvent || isExcused) time = "---";
 
-                  const bg = isWeekend ? "#f9fafb" : isAbsent ? "#fee2e2" : isSpecialEvent ? "#f3e8ff" : "transparent";
-                  const color = isWeekend ? "#9ca3af" : isAbsent ? "#dc2626" : isSpecialEvent ? "#6b21a8" : "black";
-                  const weight = (isAbsent || isSpecialEvent) ? "bold" : "normal";
+                  const bg = isWeekend ? "#f9fafb" : isAbsent ? "#fee2e2" : isSpecialEvent ? "#f3e8ff" : log.status === "Excused" ? "#eff6ff" : log.status === "Pending Appeal" ? "#fff7ed" : "transparent";
+                  const color = isWeekend ? "#9ca3af" : isAbsent ? "#dc2626" : isSpecialEvent ? "#6b21a8" : log.status === "Excused" ? "#1d4ed8" : log.status === "Pending Appeal" ? "#c2410c" : "black";
+                  const weight = (isAbsent || isSpecialEvent || isExcused) ? "bold" : "normal";
                   const style = isWeekend ? "italic" : "normal";
                   const formattedTime = log.hoursWorked > 0 ? formatToHoursMinutes(log.hoursWorked) : '';
 
@@ -432,6 +436,7 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
                     const isWeekend = log.status === "Weekend";
                     const isAbsent = log.status === "Absent";
                     const isSpecialEvent = ["SUSPENDED", "LAC Session", "Holiday"].includes(log.status);
+                    const isExcused = ["Excused", "Pending Appeal"].includes(log.status);
                     
                     const hasMorning = log.morningIn || log.morningOut;
                     const hasAfternoon = log.afternoonIn || log.afternoonOut;
@@ -441,13 +446,15 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
                     if (log.status === "Present") badgeClass = "bg-green-100 text-green-700";
                     else if (isAbsent) badgeClass = "bg-red-100 text-red-700";
                     else if (isSpecialEvent) badgeClass = "bg-purple-100 text-purple-700";
+                    else if (log.status === "Excused") badgeClass = "bg-blue-100 text-blue-700";
+                    else if (log.status === "Pending Appeal") badgeClass = "bg-orange-100 text-orange-700";
 
                     return (
-                    <tr key={index} className={`hover:bg-gray-50 transition-colors ${isWeekend ? "bg-gray-50/50" : isAbsent ? "bg-red-50/30" : isSpecialEvent ? "bg-purple-50/30" : ""}`}>
+                    <tr key={index} className={`hover:bg-gray-50 transition-colors ${isWeekend ? "bg-gray-50/50" : isAbsent ? "bg-red-50/30" : isSpecialEvent ? "bg-purple-50/30" : log.status === "Excused" ? "bg-blue-50/30" : log.status === "Pending Appeal" ? "bg-orange-50/30" : ""}`}>
                         <td className="px-6 py-4 font-bold text-gray-900">{dateObj.getDate()}</td>
                         <td className="px-6 py-4 text-gray-500">{dateObj.toLocaleDateString("en-US", { weekday: "long" })}</td>
                         <td className="px-6 py-4">
-                            {(isWeekend || isAbsent || isSpecialEvent || log.status === "--") ? (
+                            {(isWeekend || isAbsent || isSpecialEvent || isExcused || log.status === "--") ? (
                                 <span className="text-gray-300 text-xs italic">--</span>
                             ) : (
                                 <div className="flex flex-col gap-1">
@@ -459,7 +466,7 @@ const AttendanceDTR = ({ user, interns, isManager }) => {
                             )}
                         </td>
                         <td className="px-6 py-4 text-center font-mono font-bold text-[#0094FF]">
-                            {log.hoursWorked > 0 && !isSpecialEvent ? formatToHoursMinutes(log.hoursWorked) : "-"}
+                            {log.hoursWorked > 0 && !isSpecialEvent && !isExcused ? formatToHoursMinutes(log.hoursWorked) : "-"}
                         </td>
                         <td className="px-6 py-4 text-right">
                             <span className={`px-2.5 py-1 rounded-full text-[10px] uppercase font-bold tracking-wider ${badgeClass}`}>
